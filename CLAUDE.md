@@ -8,7 +8,7 @@
 - `docs/tasks.md`：任務清單，由上往下做。
 
 ## 工作流程
-1. 開始前先讀 `docs/tasks.md`，找出第一個沒打勾的任務，只做那一項。
+1. 開始前先讀 `docs/tasks.md`，找出第一個沒打勾的任務，只做那一項。標 🔄 的任務是因規格變更要修改的舊任務，只做「🔄 變更」列出的部分，原本的測試要繼續通過。
 2. 先依該任務列出的規格編號寫測試，確認測試失敗，再寫實作讓它通過。
 3. 執行全部測試，全數通過後才在 `tasks.md` 打勾。
 4. 做完一項就停下來，簡短說明改了什麼，等我確認後再繼續。
@@ -24,7 +24,8 @@
 - `src/core` 不得 include 任何 Qt 標頭，也不得讀取系統時間或使用 `std::random_device`。時間一律由參數傳入，亂數用外部指定 seed 的 `std::mt19937`。
 - `src/app`、`src/net` 不得依賴 QtWidgets。
 - 只有 `GameController` 可以修改遊戲狀態；UI 收到 `stateChanged` 後透過 `viewFor(自己)` 更新畫面。
-- 對手的能量、回能進度與技能冷卻不能出現在 UI、AI 或網路封包裡（spec E5）；一律使用 `PlayerView`，不要另開後門讀取對手的 `PlayerState`。
+- 對手的不公開資訊（能量、回能進度、下子間隔、技能冷卻、加速狀態、霸道次數）不能出現在 UI、AI 或網路封包裡（spec E5）；一律使用 `PlayerView`，不要另開後門讀取對手的 `PlayerState`。
+    - 例外只有兩個，而且都只限 UI：開發用本機模式（M3），以及人機模式開啟「顯示 AI 資訊」（M1a）時由 UI 呼叫 `viewFor(AI)`。AIEngine 永遠只拿到 `viewFor(AI 自己)`。
 - AI 只能回傳 `Action`，必須經過 `GameController::submit`，不能直接改棋盤。
 - 測試名稱要包含規格編號，例如 `TEST(EnergyTest, E3_CatchUpAfterLongGap)`。
 
