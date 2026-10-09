@@ -24,7 +24,7 @@
 - `src/core` 不得 include 任何 Qt 標頭，也不得讀取系統時間或使用 `std::random_device`。時間一律由參數傳入，亂數用外部指定 seed 的 `std::mt19937`。
 - `src/app`、`src/net` 不得依賴 QtWidgets。
 - 只有 `GameController` 可以修改遊戲狀態；UI 收到 `stateChanged` 後透過 `viewFor(自己)` 更新畫面。
-- 對手的不公開資訊（能量、回能進度、下子間隔、技能冷卻、加速狀態、霸道次數）不能出現在 UI、AI 或網路封包裡（spec E5）；一律使用 `PlayerView`，不要另開後門讀取對手的 `PlayerState`。
+- 對手的不公開資訊（能量、回能進度、下子間隔、霸道次數）不能出現在 UI、AI 或網路封包裡（spec E5）；一律使用 `PlayerView`，不要另開後門讀取對手的 `PlayerState`。
     - 例外只有兩個，而且都只限 UI：開發用本機模式（M3），以及人機模式開啟「顯示 AI 資訊」（M1a）時由 UI 呼叫 `viewFor(AI)`。AIEngine 永遠只拿到 `viewFor(AI 自己)`。
 - AI 只能回傳 `Action`，必須經過 `GameController::submit`，不能直接改棋盤。
 - 測試名稱要包含規格編號，例如 `TEST(EnergyTest, E3_CatchUpAfterLongGap)`。

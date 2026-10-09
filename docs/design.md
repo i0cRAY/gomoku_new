@@ -91,11 +91,11 @@ enum class Cell : std::uint8_t { Empty, Black, White, Destroyed };   // spec B2�
 
 struct Pos { int x; int y; };             // 0–14
 
-enum class SkillId : std::uint8_t { Accelerate, Bomb, Dominate, Destroy };   // spec S1
+enum class SkillId : std::uint8_t { Bomb, Dominate, Destroy };   // spec S1（加速已刪除）
 
 enum class RejectReason : std::uint8_t {
     GameNotRunning, OutOfBoard, DestroyedCell, Occupied, RestrictedZone,
-    PlaceCooldown, NoEnergy, SkillNotOwned, SkillUsedUp, SkillCooldown, InvalidTarget
+    PlaceCooldown, NoEnergy, SkillNotOwned, SkillUsedUp, InvalidTarget   // 技能沒有冷卻，能量不足一律 NoEnergy（spec S3）
 };
 
 // 玩家送出的請求
@@ -134,14 +134,10 @@ struct ZoneCell {
 
 ```cpp
 struct SkillConfig {
-    TimeMs accelerateCooldown = 25000;   // spec SA
-    TimeMs accelerateDuration = 5000;
-    TimeMs bombCooldown = 20000;         // spec SB
-    TimeMs dominateCooldown = 20000;     // spec SZ ⚠️待確認
+    int energyCost = 3;                  // spec S2：三項技能相同，沒有冷卻
     int dominateStones = 3;              // spec SZ1
     TimeMs zoneDuration = 3000;          // spec SZ2
-    TimeMs destroyCooldown = 30000;      // spec SX（初始冷卻）⚠️待確認
-    int destroyRadius = 4;               // spec SX2：9×9 = 中心 ±4
+    int destroyRadius = 2;               // spec SX2：5×5 = 中心 ±2
 };
 
 struct AIConfig {
@@ -153,7 +149,7 @@ struct MatchConfig {
     TimeMs regenInterval = 2000;         // spec §4：500–10000 且為 500 的倍數，不合法時 assert（UI 只提供合法值）
     int maxEnergy = 10;
     int startEnergy = 1;
-    TimeMs placeCooldown = 1000;         // spec §5
+    TimeMs placeCooldown = 500;          // spec §5
     TimeMs countdown = 3000;             // spec G2
     int minLineLength = 5;               // spec W1
     MatchMode mode = MatchMode::TimeLimit;   // spec G1b ⚠️待確認
@@ -206,25 +202,23 @@ struct PlayerState {
     int energy;
     TimeMs regenProgress;                 // E2–E4
     std::optional<TimeMs> lastPlaceTime;  // P1-4、P4
-    TimeMs accelerateUntil;               // SA1，0 表示沒有加速
     SkillId skill;                        // 開局前選的技能，S1
-    TimeMs skillReadyAt;                  // 技能冷卻結束的時間，S3、S4
     int dominateCharges;                  // 霸道剩餘次數，SZ1–SZ2（不公開）
     bool destroyUsed;                     // 摧毀已用過，SX3
     int score;                            // W1、W2（公開，也會複製到 PlayerView::scores）
 };
 ```
 
-### 4.4 EnergyManager（`src/core/energy_manager.h`）— spec E1–E4、SA2
+### 4.4 EnergyManager（`src/core/energy_manager.h`）— spec E1–E4
 
 ```cpp
 class EnergyManager {
 public:
     explicit EnergyManager(const MatchConfig&);   // 使用 regenInterval、maxEnergy
-    // 把 state 從 from 推進到 to，套用回能規則（要處理加速在區間中途開始或結束的情況）
+    // 把 state 從 from 推進到 to，套用回能規則
     void advance(PlayerState&, TimeMs from, TimeMs to) const;
-    bool canConsume(const PlayerState&) const;
-    void consume(PlayerState&) const;
+    bool canConsume(const PlayerState&, int amount = 1) const;   // 下子 1 格、技能 3 格（spec S2）
+    void consume(PlayerState&, int amount = 1) const;
     // 下一格能量的累積比例 0.0–1.0（= regenProgress / T）；能量已滿回傳 0（spec E6）
     double nextEnergyRatio(const PlayerState&) const;
 };
@@ -232,22 +226,25 @@ public:
 
 **重點：回能採「懶惰計算」**。每次處理請求前，以及每次 tick，都呼叫 `advance(上次時間, 現在)`。因此回能的正確性不受 tick 頻率影響（spec E3）。
 
-### 4.5 SkillSystem（`src/core/skill_system.h`）— spec S1–S6、SA*、SB*、SZ*、SX*
+### 4.5 SkillSystem（`src/core/skill_system.h`）— spec S1–S5、SB*、SZ*、SX*
 
 ```cpp
 class SkillSystem {
 public:
     explicit SkillSystem(SkillConfig);   // 定義於 config.h
-    void initPlayer(PlayerState&, TimeMs matchStart) const;   // S4
-    std::optional<RejectReason> check(const SkillAction&, const PlayerState&, const Board&, TimeMs now) const;
-    void apply(const SkillAction&, PlayerState&, Board&, ZoneMap&, TimeMs now) const;  // 呼叫前必須先通過 check
-    TimeMs remainingCooldown(const PlayerState&, TimeMs now) const;
+    void initPlayer(PlayerState&) const;   // 開局：清掉霸道次數、摧毀已用
+    // 能量檢查（S3）也在這裡：energy < energyCost 時回傳 NoEnergy，位置依各技能的檢查順序
+    std::optional<RejectReason> check(const SkillAction&, const PlayerState&, const Board&) const;
+    // 呼叫前必須先通過 check。扣能量（S2）由呼叫端透過 EnergyManager 處理，才能套用 E4 的回能規則
+    void apply(const SkillAction&, PlayerState&, Board&, ZoneMap&, TimeMs now) const;
     // 霸道：成功下子後由 GameController 呼叫；次數 > 0 時扣 1 並在 zones 加入十字形禁區（SZ2）
     void onPlaced(PlayerId, PlayerState&, Pos, ZoneMap&, TimeMs now) const;
 };
 ```
 
-`check` 第一步先比對 `action.skill == state.skill`，不同就回傳 `SkillNotOwned`（spec S1a）。各技能的檢查順序見 spec SA5、SB4、SZ5、SX4。
+`check` 第一步先比對 `action.skill == state.skill`，不同就回傳 `SkillNotOwned`（spec S1a）。各技能的檢查順序見 spec SB4、SZ5、SX4。
+
+`EnergyManager` 的 `canConsume` / `consume` 加上「格數」參數（下子 1 格、技能 `SkillConfig::energyCost` 格），兩者共用同一套扣能量與 E4 處理。
 
 ### 4.5a ZoneMap（`src/core/zone_map.h`）— spec SZ2–SZ4、SX2
 
@@ -275,7 +272,7 @@ public:
     GameController(MatchConfig, QObject* parent = nullptr);
     void selectSkill(PlayerId, SkillId);              // 技能選擇階段才有效（spec S1、G1a）
     void confirmSkill(PlayerId);                      // 未選技能時忽略；雙方都確定後進入倒數，對局時間從 −3000 起算（spec G2）
-    ActionResult submit(const Action&, TimeMs now);   // 依 spec P1 / SA5 / SB4 / SZ5 / SX4 的順序檢查
+    ActionResult submit(const Action&, TimeMs now);   // 依 spec P1 / SB4 / SZ5 / SX4 的順序檢查
     void tick(TimeMs now);                            // 推進能量、處理倒數、時限（W7）、禁區到期與 AI
     PlayerView viewFor(PlayerId) const;               // 某位玩家看得到的資訊（spec E5）
     void restart();                                   // G4、G4a：任何狀態都可呼叫，重置後回到技能選擇
@@ -294,7 +291,7 @@ signals:
 2. 依 spec 的順序檢查，失敗就發 `actionRejected` 並回傳
 3. 套用變更：
     - 下子：`Board::set` → `SkillSystem::onPlaced`（霸道禁區）→ `RuleChecker::findLines` → 有連線就移除棋子、加分（W1、W2、W6）、發 `linesCleared` → 達分模式檢查 W8 → 棋盤沒有空格就結束（W4）
-    - 技能：`SkillSystem::apply`（摧毀時一併清掉範圍內的禁區）
+    - 技能：`EnergyManager::consume(state, energyCost)`（S2）→ `SkillSystem::apply`（摧毀時一併清掉範圍內的禁區）
 4. 發 `stateChanged`（結束時再發 `gameOver`）
 
 **資訊隱藏（spec E5）**：雙方完整的 PlayerState 只存在 GameController 內部，不對外公開。外部（UI、AI、網路）一律透過 `viewFor` 取得 `PlayerView`（定義在 `src/core/player_view.h`，因為 `src/net` 也要用，而 net 不能依賴 app）：
@@ -307,7 +304,6 @@ struct PlayerView {
     TimeMs now;
     PlayerState self;                    // 只有自己的狀態
     double nextEnergyRatio;              // spec E6，下一格的累積比例 0.0–1.0
-    bool accelerating;                   // 加速中（能量條可換顏色）
     std::optional<SkillId> opponentSkillRevealed;  // 對手第一次用技能後才有值，只有名稱（spec S1）
     TimeMs countdownRemaining;           // Countdown 狀態時的剩餘毫秒（spec G2）
     // 以下為公開資訊（spec E5）
@@ -373,7 +369,7 @@ enum class Pattern { Five, OpenFour, Four, OpenThree, Three, OpenTwo, Two, None 
 class AIEngine {
 public:
     AIEngine(PlayerId self, const AIConfig&, const SkillConfig&, std::uint32_t seed);
-    SkillId chooseSkill();   // 技能選擇階段呼叫，用同一個 seed 的亂數從四項中隨機選（spec A2a）
+    SkillId chooseSkill();   // 技能選擇階段呼叫，用同一個 seed 的亂數從三項中隨機選（spec A2a）
     // 反應時間未到，或判斷本次不行動時，回傳 nullopt
     // 只拿得到自己的 PlayerView，讀不到對手的不公開資訊（spec A3、E5）；禁區從 view.zones 讀
     std::optional<Action> decide(const PlayerView&);
@@ -400,9 +396,9 @@ Ready -->|是| Win{"A4 自己<br/>一步成五？"}
 Win -->|是| Place
 Win -->|否| Threat{"A5 對手有<br/>成五點？"}
 Threat -->|"1 個且能下子"| Place
-Threat -->|"擋不完或不能下子"| Bomb{"選了炸彈且<br/>冷卻已好？"}
+Threat -->|"擋不完或不能下子"| Bomb{"選了炸彈且<br/>能量 ≥ 3？"}
 Bomb -->|是| UseBomb[炸對手威脅棋型的一子]
-Bomb -->|否| Destroy{"選了摧毀、冷卻已好<br/>且還沒用過？"}
+Bomb -->|否| Destroy{"選了摧毀、能量 ≥ 3<br/>且還沒用過？"}
 Destroy -->|是| UseDestroy["A5b 摧毀<br/>（對手子 − 己方子 最多）"]
 Destroy -->|"否，擋不完"| BlockOne["擋威脅分降最多的<br/>那個成五點"]
 Destroy -->|"否，不能下子"| End
@@ -411,9 +407,7 @@ Threat -->|否| Four{"A6 自己能<br/>做活四？"}
 Four -->|是| Place
 Four -->|否| Three{"A7 對手<br/>有活三？"}
 Three -->|是| Place
-Three -->|否| Buff{"A8 選了加速、冷卻已好<br/>且能量 ≤ 3？"}
-Buff -->|是| UseBuff[使用加速]
-Buff -->|否| Dom{"A8a 選了霸道、冷卻已好<br/>且次數為 0？"}
+Three -->|否| Dom{"A8a 選了霸道、次數為 0<br/>且能量 ≥ 4？"}
 Dom -->|是| UseDom[使用霸道]
 Dom -->|否| Eval["A9 / A10 全盤評分<br/>選最高分"]
 Eval --> Place
@@ -421,7 +415,6 @@ Place -->|是| Send["回傳 Action<br/>交給 GameController::submit"]
 Place -->|否| End
 UseBomb --> Send
 UseDestroy --> Send
-UseBuff --> Send
 UseDom --> Send
 Send --> End
 ```
@@ -463,7 +456,7 @@ signals:
 |`opponent_ready`|主機 → 加入方|—（只告知對手已確定，不透露選了什麼，spec S1）|
 |`request`|加入方 → 主機|`seq`、`action`|
 |`reject`|主機 → 加入方|`seq`、`reason`|
-|`snapshot`|主機 → 加入方|加入方的 PlayerView：棋盤（含 Destroyed）、禁區、雙方分數、模式與剩餘時間或目標分數、最近消除的連線、加入方自己的狀態（不含主機方的能量、冷卻與霸道次數，spec N4）|
+|`snapshot`|主機 → 加入方|加入方的 PlayerView：棋盤（含 Destroyed）、禁區、雙方分數、模式與剩餘時間或目標分數、最近消除的連線、加入方自己的狀態（不含主機方的能量與霸道次數，spec N4）|
 |`linesCleared`|主機 → 加入方|被消除的連線（給 U11 動畫用；快照也會帶，這則只是讓動畫即時）|
 |`ping`|雙向|—|
 |`rematch`|雙向|—（對局結束後：雙方都送出後才回到技能選擇，spec G4）|
@@ -477,8 +470,8 @@ signals:
 
 ### 4.10 介面層（`src/ui/`）
 
-- `BoardView`（QWidget，覆寫 `paintEvent`）：畫格線、棋子、已摧毀的格子、禁區（U9）、被拒絕時的紅色閃爍、炸彈／摧毀選目標模式（摧毀預覽 9×9）、消除連線的閃爍與「+N」（U11）。
-- `HudView`（QWidget）：自己的能量條（10 格，最後一格依比例部分填滿）、自己所選技能的按鈕與冷卻、霸道次數或摧毀已用。能量條用 `paintEvent` 自己畫，不用 `QProgressBar`，才能畫出 10 格分段加部分填滿的樣子。可設為唯讀模式，給 M1a 的 AI HUD 使用（U10）。
+- `BoardView`（QWidget，覆寫 `paintEvent`）：畫格線、棋子、已摧毀的格子、禁區（U9）、被拒絕時的紅色閃爍、炸彈／摧毀選目標模式（摧毀預覽 5×5）、消除連線的閃爍與「+N」（U11）。
+- `HudView`（QWidget）：自己的能量條（10 格，最後一格依比例部分填滿）、自己所選技能的按鈕與能量是否足夠（≥ 3）、霸道次數或摧毀已用（用過後按鈕變灰）。能量條用 `paintEvent` 自己畫，不用 `QProgressBar`，才能畫出 10 格分段加部分填滿的樣子。可設為唯讀模式，給 M1a 的 AI HUD 使用（U10）。
 - `ScoreBoard`（QWidget）：雙方分數與剩餘時間或目標分數（U8）。
 - `MainWindow`：主選單（人機 / 開房 / 加入）、設定（回能間隔、比賽模式、顯示 AI 資訊）、技能選擇畫面（spec U7，含回主選單）、對局中的「再來一局」／「回主選單」按鈕與確認視窗（U12）、重開邀請對話框（N9）、結束畫面。
 - UI 收到 `stateChanged` 後呼叫 `viewFor(自己)` 重畫，不自己保存遊戲狀態。
@@ -552,13 +545,14 @@ gomoku-rt/
 
 |問題|決定|理由|
 |---|---|---|
-|能量上限低，還是上限高再加下子間隔？|上限 10 格，每子間隔 1 秒|保留「存能量再連續進攻」的策略，又不會讓人一瞬間連下五子直接獲勝|
+|能量上限低，還是上限高再加下子間隔？|上限 10 格，每子間隔 0.5 秒|保留「存能量再連續進攻」的策略，又不會讓人一瞬間連下五子直接獲勝|
 |連線架構用 client-server 還是 P2P？|client-server，主機權威|只有主機的 GameController 能判定，兩人同時下同一格時以主機先收到的為準，不會出現雙方狀態不一致|
 |AI 用單純評分還是 minimax + α-β 剪枝？|規則優先 + 評分|即時制沒有太多時間慢慢搜尋|
 |AI 要不要分難度？|不分，固定反應時間 350 ms|原本難度只影響反應時間，統一成最強的一種，少一個設定也少一組測試|
 |連五後結束，還是消除並計分？|消除並計分|即時制下一條連五就結束太快；消除後棋盤會空出來，對局可以持續，搭配限時或達分決定勝負|
+|技能用冷卻還是耗能量？|耗 3 格能量，沒有冷卻|技能和下子搶同一份資源，要在「多下幾子」和「放技能」之間取捨；也少了一套冷卻計時|
 |禁區要不要公開？|公開|禁區直接影響對手能不能下，看不到只會讓對手一直被拒絕；霸道剩餘次數則不公開，保留心理戰|
 |回能用固定 tick 加總還是懶惰計算？|懶惰計算（每次 `advance(from, to)`）|結果與 tick 頻率無關，測試可以精確重現|
 |加入方要不要先預測畫面？|不預測，等主機快照|區網延遲很低，預測帶來的同步問題比延遲更麻煩|
 |網路同步用事件還是完整快照？|完整快照|狀態很小（225 格 + 自己的狀態），快照最簡單，也不會累積誤差|
-|對手的能量與冷卻要不要公開？|不公開，只看得到自己的|增加心理戰，看不到對手存了多少能量、技能好了沒；用 `PlayerView` 從型別上就拿不到對手資料，避免不小心洩漏|
+|對手的能量要不要公開？|不公開，只看得到自己的|增加心理戰，看不到對手存了多少能量、夠不夠放技能；用 `PlayerView` 從型別上就拿不到對手資料，避免不小心洩漏|
