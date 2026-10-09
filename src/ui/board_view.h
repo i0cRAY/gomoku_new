@@ -17,6 +17,7 @@ public:
 
     void setView(const PlayerView&);
     void flashRejected(Pos);  // P6：被拒絕的格子閃一下紅色
+    void setTargeting(bool);  // U3：選炸彈目標時改用十字游標
 
     QSize sizeHint() const override;
     QSize minimumSizeHint() const override;

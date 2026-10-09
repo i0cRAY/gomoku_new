@@ -67,6 +67,10 @@ void BoardView::flashRejected(Pos pos) {
     update();
 }
 
+void BoardView::setTargeting(bool targeting) {
+    setCursor(targeting ? Qt::CrossCursor : Qt::ArrowCursor);
+}
+
 QSize BoardView::sizeHint() const {
     return QSize(kPreferredSize, kPreferredSize);
 }

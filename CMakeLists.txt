@@ -29,8 +29,11 @@ target_link_libraries(gomoku_net PUBLIC gomoku_core Qt6::Core Qt6::Network)
 
 # 控制層：QtCore，不得依賴 QtWidgets
 add_library(gomoku_app STATIC
+    src/app/game_controller.h
     src/app/game_controller.cpp
+    src/app/game_clock.h
     src/app/game_clock.cpp
+    src/app/local_session.h
     src/app/local_session.cpp
     src/app/game_session.h
 )
@@ -40,7 +43,12 @@ target_link_libraries(gomoku_app PUBLIC gomoku_core gomoku_net Qt6::Core)
 # 介面層：QtWidgets
 add_library(gomoku_ui STATIC
     src/ui/board_geometry.cpp
+    src/ui/board_view.h
     src/ui/board_view.cpp
+    src/ui/hud_model.cpp
+    src/ui/board_input.cpp
+    src/ui/hud_view.h
+    src/ui/hud_view.cpp
 )
 set_target_properties(gomoku_ui PROPERTIES AUTOMOC ON)
 target_link_libraries(gomoku_ui PUBLIC gomoku_app Qt6::Widgets)
@@ -87,6 +95,8 @@ if(BUILD_TESTING)
 
     add_executable(ui_tests
         tests/ui/board_geometry_test.cpp
+        tests/ui/hud_model_test.cpp
+        tests/ui/board_input_test.cpp
     )
     target_link_libraries(ui_tests PRIVATE gomoku_ui GTest::gtest_main)
     gtest_discover_tests(ui_tests)
