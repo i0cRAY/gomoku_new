@@ -6,7 +6,7 @@
 
 ## Phase 0　骨架
 
-- [ ] **T01 CMake 專案骨架**
+- [x] **T01 CMake 專案骨架**
 
     - 建立 `docs/design.md` §6 的目錄結構，以及 `gomoku_core`、`gomoku_net`、`gomoku_app` 三個函式庫和主程式
     - 用 `FetchContent` 引入 GoogleTest，`tests/core` 先放一個會通過的測試
