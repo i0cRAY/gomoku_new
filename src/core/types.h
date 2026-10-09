@@ -19,6 +19,9 @@ struct Pos {
     int y;
 };  // 0–14
 
+inline bool operator==(Pos a, Pos b) { return a.x == b.x && a.y == b.y; }
+inline bool operator!=(Pos a, Pos b) { return !(a == b); }
+
 enum class SkillId : std::uint8_t { Accelerate, Bomb };
 
 enum class RejectReason : std::uint8_t {

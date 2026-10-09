@@ -14,6 +14,7 @@ find_package(Qt6 REQUIRED COMPONENTS Core Network Widgets)
 # 邏輯層 + 資料層：純 C++，不得連結任何 Qt（design §2.1）
 add_library(gomoku_core STATIC
     src/core/board.cpp
+    src/core/rule_checker.cpp
 )
 target_include_directories(gomoku_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
@@ -54,6 +55,7 @@ if(BUILD_TESTING)
     add_executable(core_tests
         tests/core/types_test.cpp
         tests/core/board_test.cpp
+        tests/core/rule_checker_test.cpp
     )
     target_link_libraries(core_tests PRIVATE gomoku_core GTest::gtest_main)
     gtest_discover_tests(core_tests)
