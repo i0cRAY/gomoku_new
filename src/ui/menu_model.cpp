@@ -9,6 +9,7 @@ constexpr TimeMs kMaxRegenInterval = 10000;
 constexpr TimeMs kRegenIntervalStep = 500;
 constexpr TimeMs kMsPerSecond = 1000;
 constexpr TimeMs kMsPerTenth = 100;
+constexpr TimeMs kMsPerMinute = 60000;
 
 // 1500 → "1.5 秒"、2000 → "2 秒"
 std::string secondsText(TimeMs ms) {
@@ -40,32 +41,41 @@ std::string regenIntervalLabel(TimeMs interval) {
     return secondsText(interval);
 }
 
-std::vector<Difficulty> difficultyOptions() {
-    return {Difficulty::Easy, Difficulty::Normal, Difficulty::Hard};
+std::vector<TimeMs> timeLimitOptions() {
+    return {5 * kMsPerMinute, 3 * kMsPerMinute, 1 * kMsPerMinute};
 }
 
-std::size_t defaultDifficultyIndex() {
-    const auto options = difficultyOptions();
-    const auto it = std::find(options.begin(), options.end(), MatchConfig{}.ai.difficulty);
+std::size_t defaultTimeLimitIndex() {
+    const auto options = timeLimitOptions();
+    const auto it = std::find(options.begin(), options.end(), MatchConfig{}.timeLimit);
     return static_cast<std::size_t>(it - options.begin());
 }
 
-std::string difficultyLabel(Difficulty difficulty) {
-    switch (difficulty) {
-        case Difficulty::Easy: return "簡單";
-        case Difficulty::Normal: return "普通";
-        case Difficulty::Hard: return "困難";
-    }
-    return {};
+std::string timeLimitLabel(TimeMs limit) {
+    return std::to_string(limit / kMsPerMinute) + " 分鐘";
+}
+
+std::string matchModeLabel(MatchMode mode) {
+    return mode == MatchMode::TimeLimit ? "限時" : "達分";
+}
+
+std::vector<SkillId> skillOptions() {
+    return {SkillId::Bomb, SkillId::Dominate, SkillId::Destroy};
 }
 
 std::string skillDescription(SkillId skill, const SkillConfig& config) {
+    const std::string cost = "消耗 " + std::to_string(config.energyCost) + " 格能量";  // U7、S2
     switch (skill) {
-        case SkillId::Accelerate:
-            return "回能速度變為 " + std::to_string(config.accelerateRegenMultiplier) + " 倍，持續 " +
-                   secondsText(config.accelerateDuration) + "\n冷卻 " + secondsText(config.accelerateCooldown);
         case SkillId::Bomb:
-            return "移除一顆對手的棋子\n冷卻 " + secondsText(config.bombCooldown);
+            return "移除一顆對手的棋子\n" + cost;
+        case SkillId::Dominate:
+            return "接下來 " + std::to_string(config.dominateStones) + " 顆棋子的上下左右\n對手 " +
+                   secondsText(config.zoneDuration) + "內不能下\n" + cost;
+        case SkillId::Destroy: {
+            const int side = config.destroyRadius * 2 + 1;
+            return "清空 " + std::to_string(side) + "×" + std::to_string(side) +
+                   " 區域，被清空的格子整局不能再下\n每局一次，" + cost;
+        }
     }
     return {};
 }
@@ -82,6 +92,14 @@ std::string resultText(GameStatus status) {
         case GameStatus::Aborted: return "連線中斷";
         default: return {};
     }
+}
+
+std::string finalResultText(GameStatus status, const std::array<int, 2>& scores) {
+    const std::string result = resultText(status);
+    if (result.empty()) {
+        return {};
+    }
+    return result + "\n黑 " + std::to_string(scores[0]) + " : " + std::to_string(scores[1]) + " 白";
 }
 
 bool isFinished(GameStatus status) {

@@ -32,7 +32,7 @@ protected:
     AIEngine whiteAI(std::uint32_t seed = 3) { return AIEngine::fromConfig(PlayerId::White, config, seed); }
 
     void humanConfirms(GameController& game) {
-        game.selectSkill(PlayerId::Black, SkillId::Accelerate);
+        game.selectSkill(PlayerId::Black, SkillId::Dominate);
         game.confirmSkill(PlayerId::Black);
     }
 
@@ -104,13 +104,10 @@ TEST_F(AIControllerTest, U7_LocalSessionReportsAIReady) {
 
 // spec §11：AI 對 AI 連續 100 場，每場都要結束，除了被拒絕之外沒有其他錯誤
 TEST_F(AIControllerTest, A1_AIVersusAISmokeTest100Games) {
-    const Difficulty difficulties[] = {Difficulty::Easy, Difficulty::Normal, Difficulty::Hard};
     int draws = 0;
     for (std::uint32_t game = 0; game < 100; ++game) {
         MatchConfig match;
-        match.ai.difficulty = difficulties[game % 3];
-        MatchConfig other = match;
-        other.ai.difficulty = difficulties[(game + 1) % 3];
+        const MatchConfig& other = match;
 
         GameController controller{match};
         controller.attachAI(PlayerId::Black, AIEngine::fromConfig(PlayerId::Black, match, game * 2 + 1));

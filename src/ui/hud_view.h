@@ -3,6 +3,7 @@
 #include <QKeySequence>
 #include <QLabel>
 #include <QPushButton>
+#include <QShortcut>
 #include <QTimer>
 #include <QWidget>
 
@@ -17,7 +18,7 @@ class EnergyBar : public QWidget {
     Q_OBJECT
 public:
     explicit EnergyBar(QWidget* parent = nullptr);
-    void setSegments(std::vector<double> segments, bool accelerating);
+    void setSegments(std::vector<double> segments);
     QSize sizeHint() const override;
 
 protected:
@@ -25,10 +26,10 @@ protected:
 
 private:
     std::vector<double> segments;
-    bool accelerating = false;
 };
 
-// 只顯示自己的資訊（spec U2、E5）：能量條、下子間隔、技能按鈕與冷卻、加速剩餘時間、拒絕原因
+// 只顯示自己的資訊（spec U2、E5）：能量條、下子間隔、技能按鈕與能量是否足夠、霸道次數、摧毀已用、拒絕原因。
+// 唯讀模式給 M1a 的 AI HUD 使用（U10）：不能按技能、沒有快捷鍵、不顯示拒絕原因。
 class HudView : public QWidget {
     Q_OBJECT
 public:
@@ -40,6 +41,7 @@ public:
     void setView(const PlayerView&);
     void setTargeting(bool);           // U3：顯示「選擇目標」提示
     void showRejection(RejectReason);  // U5
+    void setReadOnly(bool);            // U10
 
 signals:
     void skillTriggered();  // 技能按鈕或快捷鍵（U4）
@@ -56,7 +58,9 @@ private:
     QLabel* placeLabel;
     QPushButton* skillButton;
     QLabel* skillLabel;
-    QLabel* accelerateLabel;
+    QLabel* detailLabel;
     QLabel* messageLabel;
+    QShortcut* skillShortcut;
     QTimer messageTimer;
+    bool readOnly = false;
 };

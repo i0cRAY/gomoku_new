@@ -68,35 +68,13 @@ TEST(HudModelTest, U2_PlaceNotReadyWithinInterval) {
     EXPECT_TRUE(isPlaceReady(v, 1000));
 }
 
-TEST(HudModelTest, U2_CooldownSecondsRoundUp) {
-    PlayerView v = viewWith(1, 0.0);
-    v.self.skillReadyAt = 25000;
-    v.now = 12100;
-    EXPECT_EQ(skillCooldownSeconds(v), 13);  // 12.9 秒 → 顯示 13
-    v.now = 24999;
-    EXPECT_EQ(skillCooldownSeconds(v), 1);
-    v.now = 25000;
-    EXPECT_EQ(skillCooldownSeconds(v), 0);
-    v.now = 30000;
-    EXPECT_EQ(skillCooldownSeconds(v), 0);
-}
-
-TEST(HudModelTest, U2_SA1_AccelerateRemainingSeconds) {
-    PlayerView v = viewWith(1, 0.0);
-    v.self.accelerateUntil = 35000;
-    v.accelerating = true;
-    v.now = 31500;
-    EXPECT_EQ(accelerateRemainingSeconds(v), 4);
-    v.accelerating = false;
-    EXPECT_EQ(accelerateRemainingSeconds(v), 0);
-}
-
 // ---- U2、U5：文字 ----
 
 TEST(HudModelTest, U5_EveryRejectReasonHasDistinctText) {
     const RejectReason all[] = {RejectReason::GameNotRunning, RejectReason::OutOfBoard, RejectReason::Occupied,
                                 RejectReason::PlaceCooldown,  RejectReason::NoEnergy,   RejectReason::SkillNotOwned,
-                                RejectReason::SkillCooldown,  RejectReason::InvalidTarget};
+                                RejectReason::InvalidTarget,  RejectReason::DestroyedCell,
+                                RejectReason::RestrictedZone, RejectReason::SkillUsedUp};
     std::set<std::string> texts;
     for (RejectReason r : all) {
         const std::string text = rejectReasonText(r);
@@ -107,6 +85,93 @@ TEST(HudModelTest, U5_EveryRejectReasonHasDistinctText) {
 }
 
 TEST(HudModelTest, U2_SkillNames) {
-    EXPECT_NE(skillName(SkillId::Accelerate), skillName(SkillId::Bomb));
-    EXPECT_FALSE(skillName(SkillId::Accelerate).empty());
+    const SkillId all[] = {SkillId::Bomb, SkillId::Dominate, SkillId::Destroy};
+    std::set<std::string> names;
+    for (SkillId s : all) {
+        EXPECT_FALSE(skillName(s).empty());
+        names.insert(skillName(s));
+    }
+    EXPECT_EQ(names.size(), std::size(all));
+}
+
+// ---- U2：霸道次數、摧毀已用（T13 🔄）----
+
+TEST(HudModelTest, U2_SZ1_DominateChargesText) {
+    PlayerView v = viewWith(1, 0.0);
+    v.self.skill = SkillId::Dominate;
+    EXPECT_EQ(skillDetailText(v), "");
+    v.self.dominateCharges = 2;
+    EXPECT_EQ(skillDetailText(v), "霸道：還有 2 子");
+}
+
+TEST(HudModelTest, U2_SX3_DestroyUsedText) {
+    PlayerView v = viewWith(5, 0.0);
+    v.self.skill = SkillId::Destroy;
+    EXPECT_EQ(skillDetailText(v), "每局一次");
+    v.self.destroyUsed = true;
+    EXPECT_EQ(skillDetailText(v), "已使用");
+    EXPECT_FALSE(isSkillAvailable(v, 3));  // 能量夠也不能再用
+}
+
+TEST(HudModelTest, U2_S3_SkillAvailabilityDependsOnEnergy) {
+    PlayerView v = viewWith(2, 0.0);
+    v.self.skill = SkillId::Bomb;
+    EXPECT_FALSE(isSkillAvailable(v, 3));
+    v.self.energy = 3;
+    EXPECT_TRUE(isSkillAvailable(v, 3));
+}
+
+TEST(HudModelTest, U2_S3_SkillStatusText) {
+    PlayerView v = viewWith(2, 0.0);
+    v.self.skill = SkillId::Bomb;
+    EXPECT_EQ(skillStatusText(v, 3), "能量不足（需要 3 格）");
+    v.self.energy = 4;
+    EXPECT_EQ(skillStatusText(v, 3), "可使用（消耗 3 格）");
+    v.self.skill = SkillId::Destroy;
+    v.self.destroyUsed = true;
+    EXPECT_EQ(skillStatusText(v, 3), "");  // detail 已顯示「已使用」
+}
+
+TEST(HudModelTest, U3_TargetingPromptDependsOnSkill) {
+    const SkillConfig config;
+    EXPECT_NE(targetingPrompt(SkillId::Bomb, config), targetingPrompt(SkillId::Destroy, config));
+    EXPECT_NE(targetingPrompt(SkillId::Destroy, config).find("5×5"), std::string::npos);
+}
+
+TEST(HudModelTest, U2_SX3_SkillButtonDisabledAfterDestroyUsed) {
+    PlayerView v = viewWith(0, 0.0);
+    v.self.skill = SkillId::Destroy;
+    EXPECT_TRUE(isSkillButtonEnabled(v));  // 能量不足仍可按，按了會提示原因（U5）
+    v.self.destroyUsed = true;
+    EXPECT_FALSE(isSkillButtonEnabled(v));
+    v.self.skill = SkillId::Bomb;
+    EXPECT_TRUE(isSkillButtonEnabled(v));
+}
+
+// ---- U8：計分板 ----
+
+TEST(HudModelTest, U8_ScoreText) {
+    PlayerView v;
+    v.scores = {5, 11};
+    EXPECT_EQ(scoreText(v), "黑 5 : 11 白");
+}
+
+TEST(HudModelTest, U8_TimeLimitShowsRemainingClock) {
+    PlayerView v;
+    v.mode = MatchMode::TimeLimit;
+    v.timeRemaining = 179001;
+    EXPECT_EQ(matchInfoText(v), "剩餘 3:00");
+    v.timeRemaining = 61000;
+    EXPECT_EQ(matchInfoText(v), "剩餘 1:01");
+    v.timeRemaining = 9000;
+    EXPECT_EQ(matchInfoText(v), "剩餘 0:09");
+    v.timeRemaining = 0;
+    EXPECT_EQ(matchInfoText(v), "剩餘 0:00");
+}
+
+TEST(HudModelTest, U8_ScoreTargetShowsTarget) {
+    PlayerView v;
+    v.mode = MatchMode::ScoreTarget;
+    v.targetScore = 25;
+    EXPECT_EQ(matchInfoText(v), "先得 25 分獲勝");
 }

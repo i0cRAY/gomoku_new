@@ -12,7 +12,7 @@
 #include "core/config.h"
 #include "core/types.h"
 
-// 技能選擇畫面（spec U7、S1、G1a、G4）：顯示兩項技能的名稱、效果與冷卻，點選後按「確定」。
+// 技能選擇畫面（spec U7、S1、G1a、G4、G4b）：顯示四項技能的名稱、效果與冷卻，點選後按「確定」；有「回主選單」。
 // 只記得畫面上的勾選狀態；真正的選擇由 GameSession 保存與判定。
 class SkillSelectView : public QWidget {
     Q_OBJECT
@@ -26,6 +26,7 @@ public:
 signals:
     void skillSelected(PlayerId, SkillId);
     void skillConfirmed(PlayerId, SkillId);
+    void backToMenuRequested();  // G4b
 
 private:
     struct Column {

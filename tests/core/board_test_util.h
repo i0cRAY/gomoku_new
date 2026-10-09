@@ -8,7 +8,7 @@
 #include "core/board.h"
 
 // 測試輔助：用字串建立棋盤。每個字串是一列（第 0 個是 y = 0），字元依序對應 x = 0, 1, 2…
-// '.' 空、'X' 黑、'O' 白；沒寫到的格子都是空的。
+// '.' 空、'X' 黑、'O' 白、'#' 已摧毀；沒寫到的格子都是空的。
 template <typename Rows>
 Board boardFromRowRange(const Rows& rows) {
     Board board;
@@ -23,6 +23,7 @@ Board boardFromRowRange(const Rows& rows) {
                 case '.': break;
                 case 'X': board.set(p, Cell::Black); break;
                 case 'O': board.set(p, Cell::White); break;
+                case '#': board.set(p, Cell::Destroyed); break;
                 default: throw std::invalid_argument("boardFromRows: 不認得的字元");
             }
         }

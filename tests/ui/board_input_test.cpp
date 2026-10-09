@@ -28,17 +28,6 @@ TEST(BoardInputTest, U1_ClickPlacesStoneNormally) {
     EXPECT_EQ(place->pos, (Pos{7, 7}));
 }
 
-TEST(BoardInputTest, U4_AccelerateSkillKeySendsImmediately) {
-    BoardInput input(PlayerId::White);
-    const auto action = input.onSkillKey(runningView(SkillId::Accelerate));
-    ASSERT_TRUE(action.has_value());
-    const auto* skill = std::get_if<SkillAction>(&*action);
-    ASSERT_NE(skill, nullptr);
-    EXPECT_EQ(skill->player, PlayerId::White);
-    EXPECT_EQ(skill->skill, SkillId::Accelerate);
-    EXPECT_FALSE(input.isTargeting());
-}
-
 TEST(BoardInputTest, U3_BombSkillKeyEntersTargetingMode) {
     BoardInput input(PlayerId::Black);
     EXPECT_EQ(input.onSkillKey(runningView(SkillId::Bomb)), std::nullopt);
@@ -93,4 +82,37 @@ TEST(BoardInputTest, U3_TargetingEndsWhenGameStops) {
     view.status = GameStatus::BlackWon;
     input.onViewChanged(view);
     EXPECT_FALSE(input.isTargeting());
+}
+
+// ---- 霸道、摧毀（T13 🔄）----
+
+TEST(BoardInputTest, U4_SZ1_DominateSkillKeySendsImmediately) {
+    BoardInput input(PlayerId::Black);
+    const auto action = input.onSkillKey(runningView(SkillId::Dominate));
+    ASSERT_TRUE(action.has_value());
+    const auto* skill = std::get_if<SkillAction>(&*action);
+    ASSERT_NE(skill, nullptr);
+    EXPECT_EQ(skill->skill, SkillId::Dominate);
+    EXPECT_EQ(skill->target, std::nullopt);
+    EXPECT_FALSE(input.isTargeting());
+}
+
+TEST(BoardInputTest, U3_DestroyEntersTargetingAndSendsDestroy) {
+    BoardInput input(PlayerId::White);
+    const PlayerView view = runningView(SkillId::Destroy);
+    EXPECT_EQ(input.onSkillKey(view), std::nullopt);
+    EXPECT_TRUE(input.isTargeting());
+    const auto action = input.onBoardClick({9, 2}, view);
+    ASSERT_TRUE(action.has_value());
+    const auto* skill = std::get_if<SkillAction>(&*action);
+    ASSERT_NE(skill, nullptr);
+    EXPECT_EQ(skill->player, PlayerId::White);
+    EXPECT_EQ(skill->skill, SkillId::Destroy);
+    EXPECT_EQ(skill->target, std::optional<Pos>(Pos{9, 2}));
+}
+
+TEST(BoardInputTest, U3_NeedsTargetOnlyForBombAndDestroy) {
+    EXPECT_TRUE(needsTarget(SkillId::Bomb));
+    EXPECT_FALSE(needsTarget(SkillId::Dominate));
+    EXPECT_TRUE(needsTarget(SkillId::Destroy));
 }

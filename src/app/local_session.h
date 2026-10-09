@@ -18,7 +18,9 @@ public:
     void confirmSkill(PlayerId) override;
     void request(const Action&) override;
     PlayerView viewFor(PlayerId) const override;
-    void requestRematch() override;
+    void requestRematch() override;     // 本機直接重開（G4、G4a）
+    void answerRematch(bool) override;  // 本機沒有邀請，忽略
+    void leave() override;              // 中止本局並停止時鐘（G4a、G4b）
 
     void attachAI(PlayerId, std::uint32_t seed);  // M1：AI 操作這一方
     const GameClock& clock() const { return gameClock; }

@@ -4,9 +4,10 @@ LocalSession::LocalSession(MatchConfig config, PlayerId localPlayer, QObject* pa
     : GameSession(parent), config(config), localPlayer(localPlayer), controller(config) {
     connect(&controller, &GameController::stateChanged, this, &GameSession::stateChanged);
     connect(&controller, &GameController::actionRejected, this, &GameSession::actionRejected);
-    connect(&controller, &GameController::gameOver, this, [this](GameStatus status, std::vector<Pos> line) {
+    connect(&controller, &GameController::linesCleared, this, &GameSession::linesCleared);
+    connect(&controller, &GameController::gameOver, this, [this](GameStatus status, std::array<int, 2> scores) {
         gameClock.stop();
-        emit gameOver(status, line);
+        emit gameOver(status, scores);
     });
     connect(&controller, &GameController::skillConfirmed, this, [this](PlayerId player) {
         if (player != this->localPlayer) {
@@ -36,10 +37,15 @@ PlayerView LocalSession::viewFor(PlayerId player) const {
 }
 
 void LocalSession::requestRematch() {
+    gameClock.stop();
     controller.restart();
-    if (controller.viewFor(localPlayer).status == GameStatus::SkillSelect) {
-        gameClock.stop();
-    }
+}
+
+void LocalSession::answerRematch(bool) {}
+
+void LocalSession::leave() {
+    gameClock.stop();
+    controller.abort();
 }
 
 void LocalSession::attachAI(PlayerId player, std::uint32_t seed) {

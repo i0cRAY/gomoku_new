@@ -56,6 +56,9 @@ void GameController::tick(TimeMs now) {
         return;
     }
     advanceTo(now);
+    if (status != GameStatus::Running && status != GameStatus::Countdown) {
+        return;  // W7：這次 tick 跨過時限，finish 已經發過 stateChanged
+    }
     runAIs(now);
     emit stateChanged();
 }
@@ -99,24 +102,25 @@ PlayerView GameController::viewFor(PlayerId player) const {
         view.opponentSkillRevealed = state(opponent(player)).skill;
     }
     view.nextEnergyRatio = energy.nextEnergyRatio(view.self);
-    view.accelerating = view.self.accelerateUntil != 0 && lastTime < view.self.accelerateUntil;
     view.countdownRemaining = status == GameStatus::Countdown ? std::max<TimeMs>(0, -lastTime) : 0;
-    view.winningLine = winningLine;
+    view.scores = scores();
+    view.mode = config.mode;
+    view.targetScore = config.targetScore;
+    view.timeRemaining = std::clamp<TimeMs>(config.timeLimit - std::max<TimeMs>(lastTime, 0), 0, config.timeLimit);
+    view.zones = zones.active(lastTime);
+    view.lastClearedLines = lastClearedLines;
     return view;
 }
 
 void GameController::restart() {
-    if (status != GameStatus::BlackWon && status != GameStatus::WhiteWon && status != GameStatus::Draw &&
-        status != GameStatus::Aborted) {
-        return;
-    }
     // selectedSkill 保留，作為這一局的預設選擇（G4）
     status = GameStatus::SkillSelect;
     board.clear();
+    zones.clear();
     players = {};
     confirmed = {};
     skillRevealed = {};
-    winningLine.clear();
+    lastClearedLines.clear();
     lastTime = 0;
     emit stateChanged();
     for (PlayerId p : {PlayerId::Black, PlayerId::White}) {
@@ -124,6 +128,14 @@ void GameController::restart() {
             letAIChooseSkill(p);  // A2a：每一局重新隨機選技能
         }
     }
+}
+
+void GameController::abort() {
+    if (status == GameStatus::BlackWon || status == GameStatus::WhiteWon || status == GameStatus::Draw ||
+        status == GameStatus::Aborted) {
+        return;
+    }
+    finish(GameStatus::Aborted);  // W5：不計勝負
 }
 
 void GameController::advanceTo(TimeMs now) {
@@ -134,11 +146,19 @@ void GameController::advanceTo(TimeMs now) {
         }
         startMatch();  // G2：倒數結束時對局時間 = 0
     }
-    if (status == GameStatus::Running && now > lastTime) {
+    if (status != GameStatus::Running) {
+        return;
+    }
+    const TimeMs target = isTimeLimited() ? std::min(now, config.timeLimit) : now;
+    if (target > lastTime) {
         for (PlayerState& s : players) {
-            energy.advance(s, lastTime, now);
+            energy.advance(s, lastTime, target);
         }
-        lastTime = now;
+        lastTime = target;
+        zones.removeExpired(lastTime);
+    }
+    if (isTimeLimited() && lastTime >= config.timeLimit) {
+        finishByScore();  // W7：時限那一刻（含）之後結束
     }
 }
 
@@ -159,11 +179,11 @@ void GameController::initPlayers() {
         s = PlayerState{};
         s.energy = config.startEnergy;
         s.skill = *selectedSkill[indexOf(p)];
-        skills.initPlayer(s, 0);  // S4
+        skills.initPlayer(s);
     }
 }
 
-// P1：GAME_NOT_RUNNING → OUT_OF_BOARD → OCCUPIED → PLACE_COOLDOWN → NO_ENERGY
+// P1：GAME_NOT_RUNNING → OUT_OF_BOARD → DESTROYED_CELL → OCCUPIED → RESTRICTED_ZONE → PLACE_COOLDOWN → NO_ENERGY
 ActionResult GameController::submitPlace(const PlaceAction& action, TimeMs now) {
     if (status != GameStatus::Running) {
         return reject(action.player, RejectReason::GameNotRunning, action.pos);
@@ -171,8 +191,14 @@ ActionResult GameController::submitPlace(const PlaceAction& action, TimeMs now) 
     if (!board.inBounds(action.pos)) {
         return reject(action.player, RejectReason::OutOfBoard, action.pos);
     }
+    if (board.at(action.pos) == Cell::Destroyed) {
+        return reject(action.player, RejectReason::DestroyedCell, action.pos);  // B4
+    }
     if (!board.isEmpty(action.pos)) {
         return reject(action.player, RejectReason::Occupied, action.pos);  // P5：先處理到的成功
+    }
+    if (zones.isRestricted(action.pos, action.player, now)) {
+        return reject(action.player, RejectReason::RestrictedZone, action.pos);  // SZ3
     }
     PlayerState& s = state(action.player);
     if (s.lastPlaceTime && now - *s.lastPlaceTime < config.placeCooldown) {
@@ -186,28 +212,48 @@ ActionResult GameController::submitPlace(const PlaceAction& action, TimeMs now) 
     board.set(action.pos, stoneOf(action.player));
     energy.consume(s);
     s.lastPlaceTime = now;
+    skills.onPlaced(action.player, s, action.pos, zones, now);  // SZ2：被消除的子也照樣產生禁區
+    clearLines(action.player, action.pos);
 
-    if (auto line = RuleChecker::findFive(board, action.pos)) {  // W1、W2
-        finish(action.player == PlayerId::Black ? GameStatus::BlackWon : GameStatus::WhiteWon, std::move(*line));
+    if (config.mode == MatchMode::ScoreTarget && s.score >= config.targetScore) {
+        finish(action.player == PlayerId::Black ? GameStatus::BlackWon : GameStatus::WhiteWon);  // W8
     } else if (board.isFull()) {
-        finish(GameStatus::Draw, {});  // W4
+        finishByScore();  // W4
     } else {
         emit stateChanged();
     }
     return ActionResult{true, std::nullopt};
 }
 
-// SA5：GAME_NOT_RUNNING → SKILL_NOT_OWNED → SKILL_COOLDOWN
-// SB4：GAME_NOT_RUNNING → SKILL_NOT_OWNED → OUT_OF_BOARD → SKILL_COOLDOWN → INVALID_TARGET
+void GameController::clearLines(PlayerId player, Pos last) {
+    const auto lines = RuleChecker::findLines(board, last, config.minLineLength);
+    if (lines.empty()) {
+        return;
+    }
+    lastClearedLines.clear();
+    for (const auto& line : lines) {
+        state(player).score += static_cast<int>(line.size());  // W2、W6：每條線各自計分
+        lastClearedLines.push_back(ClearedLine{player, line});
+    }
+    for (const auto& line : lines) {
+        for (Pos p : line) {
+            board.set(p, Cell::Empty);  // W1：任何一方都可以再下
+        }
+    }
+    emit linesCleared(lastClearedLines);
+}
+
+// GAME_NOT_RUNNING 先檢查，其餘依 SB4 / SZ5 / SX4 交給 SkillSystem；通過後扣 3 格能量（S2）
 ActionResult GameController::submitSkill(const SkillAction& action, TimeMs now) {
     if (status != GameStatus::Running) {
         return reject(action.player, RejectReason::GameNotRunning, action.target);  // G3
     }
     PlayerState& s = state(action.player);
-    if (const auto reason = skills.check(action, s, board, now)) {
+    if (const auto reason = skills.check(action, s, board)) {
         return reject(action.player, *reason, action.target);
     }
-    skills.apply(action, s, board, now);  // W3：炸彈不觸發勝負判斷
+    energy.consume(s, skills.energyCost());  // S2
+    skills.apply(action, s, board, zones, now);  // W3：炸彈、摧毀不觸發計分
     skillRevealed[indexOf(action.player)] = true;  // S1：對手從此看得到這項技能
     emit stateChanged();
     return ActionResult{true, std::nullopt};
@@ -218,9 +264,13 @@ ActionResult GameController::reject(PlayerId player, RejectReason reason, std::o
     return ActionResult{false, reason};
 }
 
-void GameController::finish(GameStatus result, std::vector<Pos> line) {
+void GameController::finish(GameStatus result) {
     status = result;
-    winningLine = std::move(line);
     emit stateChanged();
-    emit gameOver(status, winningLine);
+    emit gameOver(status, scores());
+}
+
+void GameController::finishByScore() {
+    const auto [black, white] = scores();
+    finish(black > white ? GameStatus::BlackWon : white > black ? GameStatus::WhiteWon : GameStatus::Draw);  // W9
 }

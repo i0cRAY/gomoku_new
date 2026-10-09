@@ -29,24 +29,18 @@ TEST(MenuModelTest, G1_IntervalLabelInSeconds) {
     EXPECT_EQ(regenIntervalLabel(7500), "7.5 秒");
 }
 
-// ---- U7：技能說明包含效果與冷卻 ----
+// ---- U7：技能說明包含效果與能量消耗 ----
 
-TEST(MenuModelTest, U7_AccelerateDescriptionShowsEffectAndCooldown) {
-    const std::string text = skillDescription(SkillId::Accelerate, SkillConfig{});
-    EXPECT_NE(text.find("2 倍"), std::string::npos);
-    EXPECT_NE(text.find("5 秒"), std::string::npos);
-    EXPECT_NE(text.find("冷卻 25 秒"), std::string::npos);
-}
-
-TEST(MenuModelTest, U7_BombDescriptionShowsCooldown) {
+TEST(MenuModelTest, U7_BombDescriptionShowsCost) {
     const std::string text = skillDescription(SkillId::Bomb, SkillConfig{});
-    EXPECT_NE(text.find("冷卻 20 秒"), std::string::npos);
+    EXPECT_NE(text.find("消耗 3 格能量"), std::string::npos);
+    EXPECT_EQ(text.find("冷卻"), std::string::npos);
 }
 
 TEST(MenuModelTest, U7_DescriptionFollowsConfig) {
     SkillConfig config;
-    config.bombCooldown = 15000;
-    EXPECT_NE(skillDescription(SkillId::Bomb, config).find("冷卻 15 秒"), std::string::npos);
+    config.energyCost = 4;
+    EXPECT_NE(skillDescription(SkillId::Bomb, config).find("消耗 4 格能量"), std::string::npos);
 }
 
 // ---- G2：倒數文字 ----
@@ -78,19 +72,59 @@ TEST(MenuModelTest, G4_IsFinished) {
     EXPECT_FALSE(isFinished(GameStatus::SkillSelect));
 }
 
-// ---- G1、M1：AI 難度 ----
+// ---- G1b：比賽模式 ----
 
-TEST(MenuModelTest, G1_M1_DifficultyOptionsInOrder) {
-    const auto options = difficultyOptions();
+TEST(MenuModelTest, G1b_TimeLimitOptionsAreFiveThreeOneMinutes) {
+    const auto options = timeLimitOptions();
     ASSERT_EQ(options.size(), 3u);
-    EXPECT_EQ(options[0], Difficulty::Easy);
-    EXPECT_EQ(options[1], Difficulty::Normal);
-    EXPECT_EQ(options[2], Difficulty::Hard);
-    EXPECT_EQ(options[defaultDifficultyIndex()], MatchConfig{}.ai.difficulty);
+    EXPECT_EQ(options[0], 300000);
+    EXPECT_EQ(options[1], 180000);
+    EXPECT_EQ(options[2], 60000);
+    EXPECT_EQ(options[defaultTimeLimitIndex()], MatchConfig{}.timeLimit);
+    EXPECT_EQ(timeLimitLabel(300000), "5 分鐘");
+    EXPECT_EQ(timeLimitLabel(60000), "1 分鐘");
 }
 
-TEST(MenuModelTest, A2_DifficultyLabels) {
-    EXPECT_EQ(difficultyLabel(Difficulty::Easy), "簡單");
-    EXPECT_EQ(difficultyLabel(Difficulty::Normal), "普通");
-    EXPECT_EQ(difficultyLabel(Difficulty::Hard), "困難");
+TEST(MenuModelTest, G1b_TargetScoreRange) {
+    EXPECT_EQ(kMinTargetScore, 5);
+    EXPECT_EQ(kMaxTargetScore, 100);
+    EXPECT_GE(MatchConfig{}.targetScore, kMinTargetScore);
+    EXPECT_LE(MatchConfig{}.targetScore, kMaxTargetScore);
+}
+
+TEST(MenuModelTest, G1b_ModeLabels) {
+    EXPECT_EQ(matchModeLabel(MatchMode::TimeLimit), "限時");
+    EXPECT_EQ(matchModeLabel(MatchMode::ScoreTarget), "達分");
+}
+
+// ---- U6：結束畫面顯示勝負與分數 ----
+
+TEST(MenuModelTest, U6_FinalResultTextIncludesScores) {
+    EXPECT_EQ(finalResultText(GameStatus::BlackWon, {10, 5}), "黑方獲勝\n黑 10 : 5 白");
+    EXPECT_EQ(finalResultText(GameStatus::Draw, {0, 0}), "和局\n黑 0 : 0 白");
+    EXPECT_EQ(finalResultText(GameStatus::Running, {1, 2}), "");
+}
+
+// ---- U7：四項技能 ----
+
+TEST(MenuModelTest, U7_SkillOptionsListAllThree) {
+    const auto skills = skillOptions();
+    ASSERT_EQ(skills.size(), 3u);
+    EXPECT_EQ(skills[0], SkillId::Bomb);
+    EXPECT_EQ(skills[1], SkillId::Dominate);
+    EXPECT_EQ(skills[2], SkillId::Destroy);
+}
+
+TEST(MenuModelTest, U7_DominateDescription) {
+    const std::string text = skillDescription(SkillId::Dominate, SkillConfig{});
+    EXPECT_NE(text.find("3 顆"), std::string::npos);
+    EXPECT_NE(text.find("3 秒"), std::string::npos);
+    EXPECT_NE(text.find("消耗 3 格能量"), std::string::npos);
+}
+
+TEST(MenuModelTest, U7_DestroyDescriptionMentionsOncePerGame) {
+    const std::string text = skillDescription(SkillId::Destroy, SkillConfig{});
+    EXPECT_NE(text.find("5×5"), std::string::npos);
+    EXPECT_NE(text.find("每局一次"), std::string::npos);
+    EXPECT_NE(text.find("消耗 3 格能量"), std::string::npos);
 }

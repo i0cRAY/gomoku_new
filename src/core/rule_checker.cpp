@@ -1,6 +1,7 @@
 #include "core/rule_checker.h"
 
 #include <array>
+#include <utility>
 
 namespace {
 
@@ -23,25 +24,19 @@ void collect(const Board& board, Pos last, Cell color, int dx, int dy, std::vect
 
 }  // namespace
 
-std::optional<std::vector<Pos>> RuleChecker::findFive(const Board& board, Pos last) {
+std::vector<std::vector<Pos>> RuleChecker::findLines(const Board& board, Pos last, int minLength) {
+    std::vector<std::vector<Pos>> lines;
     const Cell color = board.at(last);
-    if (color == Cell::Empty) {
-        return std::nullopt;
+    if (color != Cell::Black && color != Cell::White) {
+        return lines;
     }
-
-    std::vector<Pos> winning;
     for (const Direction d : kDirections) {
-        std::vector<Pos> line;
+        std::vector<Pos> line{last};
         collect(board, last, color, d.dx, d.dy, line);
         collect(board, last, color, -d.dx, -d.dy, line);
-        if (static_cast<int>(line.size()) + 1 >= kWinLength) {
-            winning.insert(winning.end(), line.begin(), line.end());
+        if (static_cast<int>(line.size()) >= minLength) {
+            lines.push_back(std::move(line));
         }
     }
-
-    if (winning.empty()) {
-        return std::nullopt;
-    }
-    winning.push_back(last);
-    return winning;
+    return lines;
 }

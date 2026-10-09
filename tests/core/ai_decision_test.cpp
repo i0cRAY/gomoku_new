@@ -11,13 +11,12 @@
 
 namespace {
 
-constexpr TimeMs kReaction = 700;
+constexpr TimeMs kReaction = 350;  // spec A2：固定反應時間
 
 struct ViewSpec {
     std::vector<std::string_view> rows;
-    SkillId skill = SkillId::Accelerate;
-    int energy = 5;
-    bool skillReady = false;
+    SkillId skill = SkillId::Dominate;
+    int energy = 5;  // ≥ 3：夠用技能（S2）
     std::optional<TimeMs> lastPlaceTime = std::nullopt;
     TimeMs now = 30000;
 };
@@ -31,14 +30,12 @@ PlayerView viewOf(const ViewSpec& spec) {
     v.now = spec.now;
     v.self.energy = spec.energy;
     v.self.skill = spec.skill;
-    v.self.skillReadyAt = spec.skillReady ? spec.now : spec.now + 10000;
     v.self.lastPlaceTime = spec.lastPlaceTime;
     return v;
 }
 
 AIEngine engine(std::uint32_t seed = 1) {
     MatchConfig config;
-    config.ai.difficulty = Difficulty::Normal;  // 反應時間 700 ms
     return AIEngine::fromConfig(PlayerId::Black, config, seed);
 }
 
@@ -100,7 +97,6 @@ TEST(AIDecisionTest, A5_DoubleThreatWithBombBombsThreatStone) {
     AIEngine ai = engine();
     ViewSpec spec{{"", "", "", "", "", "", "", "..OOOO..."}};
     spec.skill = SkillId::Bomb;
-    spec.skillReady = true;
     const auto action = ai.decide(viewOf(spec));
     const SkillAction* bomb = skillOf(action);
     ASSERT_NE(bomb, nullptr);
@@ -111,16 +107,17 @@ TEST(AIDecisionTest, A5_DoubleThreatWithBombBombsThreatStone) {
     EXPECT_LE(bomb->target->x, 5);
 }
 
-TEST(AIDecisionTest, A5_DoubleThreatWithAccelerateStillBlocksOne) {
+TEST(AIDecisionTest, A5_DoubleThreatWithDominateStillBlocksOne) {
     AIEngine ai = engine();
     const auto action = ai.decide(viewOf({{"", "", "", "", "", "", "", "..OOOO..."}}));
     EXPECT_TRUE(placedIn(action, cells({{1, 7}, {6, 7}})));
 }
 
-TEST(AIDecisionTest, A5_DoubleThreatWithBombOnCooldownBlocksOne) {
+TEST(AIDecisionTest, A5_DoubleThreatWithBombButNoEnergyForItBlocksOne) {
     AIEngine ai = engine();
     ViewSpec spec{{"", "", "", "", "", "", "", "..OOOO..."}};
     spec.skill = SkillId::Bomb;
+    spec.energy = 2;  // 能下子，但不夠用炸彈
     const auto action = ai.decide(viewOf(spec));
     EXPECT_TRUE(placedIn(action, cells({{1, 7}, {6, 7}})));
 }
@@ -129,8 +126,7 @@ TEST(AIDecisionTest, A5_CannotPlaceButBombReadyBombs) {
     AIEngine ai = engine();
     ViewSpec spec{{"", "", "", "", "", "", "", ".XOOOO..."}};
     spec.skill = SkillId::Bomb;
-    spec.skillReady = true;
-    spec.lastPlaceTime = spec.now - 500;  // 下子間隔未過
+    spec.lastPlaceTime = spec.now - 200;  // 下子間隔未過
     const auto action = ai.decide(viewOf(spec));
     const SkillAction* bomb = skillOf(action);
     ASSERT_NE(bomb, nullptr);
@@ -141,7 +137,6 @@ TEST(AIDecisionTest, A5_CannotPlaceAndNoBombDoesNothing) {
     AIEngine ai = engine();
     ViewSpec spec{{"", "", "", "", "", "", "", ".XOOOO..."}};
     spec.energy = 0;
-    spec.skillReady = true;  // 加速好了也不用：成五點的情況下加速沒有幫助
     EXPECT_EQ(ai.decide(viewOf(spec)), std::nullopt);
 }
 
@@ -189,34 +184,14 @@ TEST(AIDecisionTest, A7_PrefersBlockThatHelpsSelf) {
     EXPECT_EQ(placedAt(action), std::optional<Pos>(Pos{6, 7}));
 }
 
-// ---- A8：加速 ----
+// ---- A9：沒有威脅時不浪費技能 ----
 
-TEST(AIDecisionTest, A8_UsesAccelerateWhenLowOnEnergy) {
+TEST(AIDecisionTest, A9_BombOwnerPlacesWhenNoThreat) {
     AIEngine ai = engine();
     ViewSpec spec{{"", "", "", "", "", "", "", ".....X..."}};
-    spec.energy = 3;
-    spec.skillReady = true;
-    const SkillAction* skill = skillOf(ai.decide(viewOf(spec)));
-    ASSERT_NE(skill, nullptr);
-    EXPECT_EQ(skill->skill, SkillId::Accelerate);
-}
-
-TEST(AIDecisionTest, A8_KeepsPlacingWithEnoughEnergy) {
-    AIEngine ai = engine();
-    ViewSpec spec{{"", "", "", "", "", "", "", ".....X..."}};
-    spec.energy = 4;
-    spec.skillReady = true;
-    EXPECT_TRUE(placedAt(ai.decide(viewOf(spec))).has_value());
-}
-
-TEST(AIDecisionTest, A8_BombOwnerNeverAccelerates) {
-    AIEngine ai = engine();
-    ViewSpec spec{{"", "", "", "", "", "", "", ".....X..."}};
-    spec.energy = 2;
     spec.skill = SkillId::Bomb;
-    spec.skillReady = true;
     const auto action = ai.decide(viewOf(spec));
-    EXPECT_TRUE(placedAt(action).has_value());  // 沒有威脅：炸彈不用，加速也不能用
+    EXPECT_TRUE(placedAt(action).has_value());
 }
 
 // ---- A9：評分 ----
@@ -259,22 +234,16 @@ TEST(AIDecisionTest, A2_NoActionStillCountsAsDecision) {
     EXPECT_TRUE(ai.decide(viewOf(spec)).has_value());
 }
 
-TEST(AIDecisionTest, A2_DifficultySetsReactionTime) {
+TEST(AIDecisionTest, A2_ReactionTimeComesFromConfig) {
     MatchConfig config;
-    config.ai.difficulty = Difficulty::Hard;
-    AIEngine hard = AIEngine::fromConfig(PlayerId::Black, config, 1);
+    AIEngine ai = AIEngine::fromConfig(PlayerId::Black, config, 1);
     ViewSpec spec{{""}};
     spec.now = 0;
-    ASSERT_TRUE(hard.decide(viewOf(spec)).has_value());
-    spec.now = 350;
-    EXPECT_TRUE(hard.decide(viewOf(spec)).has_value());
-
-    config.ai.difficulty = Difficulty::Easy;
-    AIEngine easy = AIEngine::fromConfig(PlayerId::Black, config, 1);
-    spec.now = 0;
-    ASSERT_TRUE(easy.decide(viewOf(spec)).has_value());
-    spec.now = 1199;
-    EXPECT_EQ(easy.decide(viewOf(spec)), std::nullopt);
+    ASSERT_TRUE(ai.decide(viewOf(spec)).has_value());
+    spec.now = config.ai.reactionTime - 1;
+    EXPECT_EQ(ai.decide(viewOf(spec)), std::nullopt);
+    spec.now = config.ai.reactionTime;
+    EXPECT_TRUE(ai.decide(viewOf(spec)).has_value());
 }
 
 TEST(AIDecisionTest, A2_NewGameResetsReactionTimer) {
@@ -304,12 +273,12 @@ TEST(AIDecisionTest, A2a_ChooseSkillReproducibleWithSeed) {
     }
 }
 
-TEST(AIDecisionTest, A2a_ChooseSkillUsesBothSkills) {
+TEST(AIDecisionTest, A2a_ChooseSkillUsesAllThreeSkills) {
     std::set<SkillId> seen;
-    for (std::uint32_t seed = 0; seed < 20; ++seed) {
+    for (std::uint32_t seed = 0; seed < 30; ++seed) {
         seen.insert(engine(seed).chooseSkill());
     }
-    EXPECT_EQ(seen.size(), 2u);
+    EXPECT_EQ(seen.size(), 3u);
 }
 
 // ---- A3、E5：只吃得到 PlayerView ----

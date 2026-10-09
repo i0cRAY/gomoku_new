@@ -99,3 +99,39 @@ TEST(BoardTestUtil, T04_FromRowsRejectsBadInput) {
     EXPECT_THROW(boardFromRows({"..Z"}), std::invalid_argument);
     EXPECT_THROW(boardFromRows({"................"}), std::invalid_argument);  // 16 格
 }
+
+TEST(BoardTest, B4_DestroyedCellIsNotEmpty) {
+    Board board;
+    board.set({3, 4}, Cell::Destroyed);
+    EXPECT_EQ(board.at({3, 4}), Cell::Destroyed);
+    EXPECT_FALSE(board.isEmpty({3, 4}));
+}
+
+TEST(BoardTest, W4_IsFullTreatsDestroyedAsNotEmpty) {
+    Board board;
+    for (int y = 0; y < Board::kSize; ++y) {
+        for (int x = 0; x < Board::kSize; ++x) {
+            board.set({x, y}, x < 5 ? Cell::Destroyed : Cell::Black);
+        }
+    }
+    EXPECT_TRUE(board.isFull());
+    board.set({0, 0}, Cell::Empty);
+    EXPECT_FALSE(board.isFull());
+}
+
+TEST(BoardTest, G4_ClearRemovesDestroyedCells) {
+    Board board;
+    board.set({0, 0}, Cell::Destroyed);
+    board.set({14, 14}, Cell::Destroyed);
+    board.clear();
+    EXPECT_TRUE(board.isEmpty({0, 0}));
+    EXPECT_TRUE(board.isEmpty({14, 14}));
+}
+
+TEST(BoardTest, B4_TestUtilParsesDestroyed) {
+    const Board board = boardFromRows({"#X.O"});
+    EXPECT_EQ(board.at({0, 0}), Cell::Destroyed);
+    EXPECT_EQ(board.at({1, 0}), Cell::Black);
+    EXPECT_EQ(board.at({2, 0}), Cell::Empty);
+    EXPECT_EQ(board.at({3, 0}), Cell::White);
+}

@@ -17,6 +17,7 @@ add_library(gomoku_core STATIC
     src/core/rule_checker.cpp
     src/core/energy_manager.cpp
     src/core/skill_system.cpp
+    src/core/zone_map.cpp
     src/core/ai_engine.cpp
 )
 target_include_directories(gomoku_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -44,6 +45,7 @@ target_link_libraries(gomoku_app PUBLIC gomoku_core gomoku_net Qt6::Core)
 # 介面層：QtWidgets
 add_library(gomoku_ui STATIC
     src/ui/board_geometry.cpp
+    src/ui/board_overlay.cpp
     src/ui/board_view.h
     src/ui/board_view.cpp
     src/ui/hud_model.cpp
@@ -51,6 +53,8 @@ add_library(gomoku_ui STATIC
     src/ui/menu_model.cpp
     src/ui/hud_view.h
     src/ui/hud_view.cpp
+    src/ui/score_board.h
+    src/ui/score_board.cpp
     src/ui/skill_select_view.h
     src/ui/skill_select_view.cpp
     src/ui/main_window.h
@@ -85,6 +89,8 @@ if(BUILD_TESTING)
         tests/core/rule_checker_test.cpp
         tests/core/energy_manager_test.cpp
         tests/core/skill_system_test.cpp
+        tests/core/dominate_test.cpp
+        tests/core/destroy_test.cpp
         tests/core/ai_pattern_test.cpp
         tests/core/ai_score_test.cpp
         tests/core/ai_decision_test.cpp
@@ -96,6 +102,8 @@ if(BUILD_TESTING)
         tests/app/main.cpp
         tests/app/game_controller_test.cpp
         tests/app/game_controller_skill_test.cpp
+        tests/app/scoring_test.cpp
+        tests/app/dominate_destroy_flow_test.cpp
         tests/app/countdown_restart_test.cpp
         tests/app/local_session_test.cpp
         tests/app/ai_controller_test.cpp
@@ -108,6 +116,7 @@ if(BUILD_TESTING)
         tests/ui/hud_model_test.cpp
         tests/ui/board_input_test.cpp
         tests/ui/menu_model_test.cpp
+        tests/ui/board_overlay_test.cpp
     )
     target_link_libraries(ui_tests PRIVATE gomoku_ui GTest::gtest_main)
     gtest_discover_tests(ui_tests)

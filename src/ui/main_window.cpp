@@ -1,6 +1,7 @@
 #include "ui/main_window.h"
 
 #include <QHBoxLayout>
+#include <QMessageBox>
 #include <QRandomGenerator>
 #include <QShortcut>
 #include <QVBoxLayout>
@@ -51,6 +52,7 @@ MainWindow::MainWindow(QWidget* parent)
             session->confirmSkill(p);
         }
     });
+    connect(skillPage, &SkillSelectView::backToMenuRequested, this, &MainWindow::backToMenu);  // G4b
 
     auto* escape = new QShortcut(QKeySequence(Qt::Key_Escape), this);
     connect(escape, &QShortcut::activated, this, &MainWindow::cancelTargeting);  // U3
@@ -78,16 +80,29 @@ QWidget* MainWindow::buildMenuPage() {
     intervalRow->addWidget(intervalBox);
     layout->addLayout(intervalRow);
 
-    // G1：AI 難度（僅 M1）
-    auto* difficultyRow = new QHBoxLayout;
-    difficultyRow->addWidget(new QLabel(QStringLiteral("AI 難度")));
-    difficultyBox = new QComboBox;
-    for (Difficulty d : difficultyOptions()) {
-        difficultyBox->addItem(toQString(difficultyLabel(d)), static_cast<int>(d));
+    // G1b：比賽模式（限時 5／3／1 分鐘，或達分自訂目標）
+    auto* modeRow = new QHBoxLayout;
+    modeRow->addWidget(new QLabel(QStringLiteral("比賽模式")));
+    modeBox = new QComboBox;
+    for (MatchMode mode : {MatchMode::TimeLimit, MatchMode::ScoreTarget}) {
+        modeBox->addItem(toQString(matchModeLabel(mode)), static_cast<int>(mode));
     }
-    difficultyBox->setCurrentIndex(static_cast<int>(defaultDifficultyIndex()));
-    difficultyRow->addWidget(difficultyBox);
-    layout->addLayout(difficultyRow);
+    modeBox->setCurrentIndex(modeBox->findData(static_cast<int>(MatchConfig{}.mode)));
+    modeRow->addWidget(modeBox);
+    timeLimitBox = new QComboBox;
+    for (TimeMs limit : timeLimitOptions()) {
+        timeLimitBox->addItem(toQString(timeLimitLabel(limit)), QVariant::fromValue<qlonglong>(limit));
+    }
+    timeLimitBox->setCurrentIndex(static_cast<int>(defaultTimeLimitIndex()));
+    modeRow->addWidget(timeLimitBox);
+    targetScoreBox = new QSpinBox;
+    targetScoreBox->setRange(kMinTargetScore, kMaxTargetScore);
+    targetScoreBox->setValue(MatchConfig{}.targetScore);
+    targetScoreBox->setSuffix(QStringLiteral(" 分"));
+    modeRow->addWidget(targetScoreBox);
+    layout->addLayout(modeRow);
+    connect(modeBox, &QComboBox::currentIndexChanged, this, &MainWindow::refreshModeWidgets);
+    refreshModeWidgets();
     layout->addSpacing(12);
 
     auto addButton = [&](const QString& text, bool enabled) {
@@ -119,11 +134,13 @@ QWidget* MainWindow::buildGamePage() {
     banner = new QLabel;
     scaleFont(banner, kBannerScale);
     banner->setAlignment(Qt::AlignCenter);
+    scoreBoard = new ScoreBoard;
     blackHud = new HudView(config, QKeySequence(Qt::Key_Q));
     whiteHud = new HudView(config, QKeySequence(Qt::Key_P));
     rematchButton = new QPushButton(QStringLiteral("再來一局"));
     menuButton = new QPushButton(QStringLiteral("回主選單"));
     side->addWidget(banner);
+    side->addWidget(scoreBoard);
     side->addWidget(blackHud);
     side->addWidget(whiteHud);
     side->addStretch();
@@ -134,19 +151,25 @@ QWidget* MainWindow::buildGamePage() {
     connect(board, &BoardView::cellClicked, this, &MainWindow::onBoardClicked);
     connect(blackHud, &HudView::skillTriggered, this, [this] { onSkillKey(PlayerId::Black); });
     connect(whiteHud, &HudView::skillTriggered, this, [this] { onSkillKey(PlayerId::White); });
-    connect(rematchButton, &QPushButton::clicked, this, [this] {
-        if (session) {
-            session->requestRematch();  // G4
-        }
-    });
-    connect(menuButton, &QPushButton::clicked, this, &MainWindow::backToMenu);
+    rematchButton->setFocusPolicy(Qt::NoFocus);
+    menuButton->setFocusPolicy(Qt::NoFocus);
+    connect(rematchButton, &QPushButton::clicked, this, &MainWindow::onRematchClicked);
+    connect(menuButton, &QPushButton::clicked, this, &MainWindow::onMenuClicked);
     return page;
+}
+
+void MainWindow::refreshModeWidgets() {
+    const bool timeLimited = static_cast<MatchMode>(modeBox->currentData().toInt()) == MatchMode::TimeLimit;
+    timeLimitBox->setVisible(timeLimited);
+    targetScoreBox->setVisible(!timeLimited);
 }
 
 MatchConfig MainWindow::configFromMenu() const {
     MatchConfig result;
     result.regenInterval = intervalBox->currentData().toLongLong();
-    result.ai.difficulty = static_cast<Difficulty>(difficultyBox->currentData().toInt());
+    result.mode = static_cast<MatchMode>(modeBox->currentData().toInt());
+    result.timeLimit = timeLimitBox->currentData().toLongLong();
+    result.targetScore = targetScoreBox->value();
     return result;
 }
 
@@ -175,9 +198,11 @@ void MainWindow::startSession(std::vector<PlayerId> players) {
     lastStatus.reset();
     blackHud->setConfig(config);
     whiteHud->setConfig(config);
+    board->setZoneDuration(config.skill.zoneDuration);
 
     session = std::make_unique<LocalSession>(config, primary);
     connect(session.get(), &GameSession::stateChanged, this, &MainWindow::refresh);
+    connect(session.get(), &GameSession::linesCleared, board, &BoardView::flashCleared);  // U11
     connect(session.get(), &GameSession::actionRejected, this, &MainWindow::onRejected);
     connect(session.get(), &GameSession::opponentReady, this, [this] { skillPage->setOpponentReady(true); });
     refresh();
@@ -187,7 +212,11 @@ bool MainWindow::isLocal(PlayerId player) const {
     return std::find(localPlayers.begin(), localPlayers.end(), player) != localPlayers.end();
 }
 
+// G4a、G4b：中止本局（區網會通知對手，N8）後回主選單
 void MainWindow::backToMenu() {
+    if (session) {
+        session->leave();
+    }
     session.reset();
     for (BoardInput& i : inputs) {
         i.cancel();
@@ -213,22 +242,58 @@ void MainWindow::refresh() {
 
     pages->setCurrentWidget(gamePage);
     board->setView(view);
+    scoreBoard->setView(view);
     for (PlayerId p : localPlayers) {
         const PlayerView own = session->viewFor(p);
         input(p).onViewChanged(own);
         hud(p)->setView(own);
         hud(p)->setTargeting(input(p).isTargeting());
     }
-    board->setTargeting(input(PlayerId::Black).isTargeting() || input(PlayerId::White).isTargeting());
+    std::optional<int> previewRadius;
+    bool targeting = false;
+    for (PlayerId p : localPlayers) {
+        if (input(p).isTargeting()) {
+            targeting = true;
+            if (session->viewFor(p).self.skill == SkillId::Destroy) {
+                previewRadius = config.skill.destroyRadius;  // U3：摧毀預覽範圍
+            }
+        }
+    }
+    board->setTargeting(targeting, previewRadius);
 
     if (view.status == GameStatus::Countdown) {
         banner->setText(toQString(countdownText(view.countdownRemaining)));
     } else {
-        banner->setText(toQString(resultText(view.status)));  // U6；進行中為空字串
+        banner->setText(toQString(finalResultText(view.status, view.scores)));  // U6；進行中為空字串
     }
-    const bool finished = isFinished(view.status);
-    rematchButton->setVisible(finished);
-    menuButton->setVisible(finished);
+    // G4a：倒數、進行中與結束後都一直顯示（U12）
+}
+
+void MainWindow::onRematchClicked() {
+    if (!session) {
+        return;
+    }
+    if (!isFinished(session->viewFor(primary).status) && !confirmLeavingMatch(QStringLiteral("重新開局"))) {
+        return;
+    }
+    for (BoardInput& i : inputs) {
+        i.cancel();
+    }
+    session->requestRematch();  // G4、G4a
+}
+
+void MainWindow::onMenuClicked() {
+    if (session && !isFinished(session->viewFor(primary).status) &&
+        !confirmLeavingMatch(QStringLiteral("回到主選單"))) {
+        return;
+    }
+    backToMenu();
+}
+
+bool MainWindow::confirmLeavingMatch(const QString& action) {
+    const auto answer = QMessageBox::question(
+        this, action, QStringLiteral("對局還在進行中，確定要%1嗎？本局不計勝負。").arg(action));
+    return answer == QMessageBox::Yes;
 }
 
 void MainWindow::onRejected(PlayerId player, RejectReason reason, std::optional<Pos> pos) {

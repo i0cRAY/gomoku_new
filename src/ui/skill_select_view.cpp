@@ -5,14 +5,12 @@
 #include <QRadioButton>
 #include <QVBoxLayout>
 
-#include <array>
 
 #include "ui/hud_model.h"
 #include "ui/menu_model.h"
 
 namespace {
 
-constexpr std::array<SkillId, 2> kSkills{SkillId::Accelerate, SkillId::Bomb};
 constexpr int kDescriptionIndent = 24;
 
 QString toQString(const std::string& s) {
@@ -41,7 +39,10 @@ SkillSelectView::SkillSelectView(SkillConfig config, QWidget* parent)
     layout->addWidget(title);
     layout->addWidget(columnsArea);
     layout->addWidget(statusLabel);
+    auto* backButton = new QPushButton(QStringLiteral("回主選單"));
+    layout->addWidget(backButton, 0, Qt::AlignCenter);
     layout->addStretch();
+    connect(backButton, &QPushButton::clicked, this, &SkillSelectView::backToMenuRequested);  // G4b
 }
 
 void SkillSelectView::reset(const std::vector<PlayerId>& players, const std::map<PlayerId, SkillId>& defaults) {
@@ -56,7 +57,7 @@ void SkillSelectView::reset(const std::vector<PlayerId>& players, const std::map
         auto* box = new QGroupBox(players.size() > 1 ? playerName(player) : QString());
         auto* boxLayout = new QVBoxLayout(box);
         auto* group = new QButtonGroup(box);
-        for (SkillId skill : kSkills) {
+        for (SkillId skill : skillOptions()) {
             auto* radio = new QRadioButton(toQString(skillName(skill)));
             auto* description = new QLabel(toQString(skillDescription(skill, config)));
             description->setContentsMargins(kDescriptionIndent, 0, 0, 0);

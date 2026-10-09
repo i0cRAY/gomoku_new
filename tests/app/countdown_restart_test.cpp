@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <array>
 #include <vector>
 
 #include "app/game_controller.h"
@@ -8,9 +9,11 @@ class CountdownRestartTest : public ::testing::Test {
 protected:
     void SetUp() override {
         config.regenInterval = 500;
+        config.mode = MatchMode::ScoreTarget;  // 第一條連五就結束，方便測試結束後的流程
+        config.targetScore = 5;
     }
 
-    void confirmBoth(GameController& game, SkillId blackSkill = SkillId::Accelerate,
+    void confirmBoth(GameController& game, SkillId blackSkill = SkillId::Dominate,
                      SkillId whiteSkill = SkillId::Bomb) {
         game.selectSkill(PlayerId::Black, blackSkill);
         game.selectSkill(PlayerId::White, whiteSkill);
@@ -98,7 +101,8 @@ TEST_F(CountdownRestartTest, G4_RestartResetsEverythingToSkillSelect) {
     EXPECT_EQ(changes, 1);
     const PlayerView view = game.viewFor(PlayerId::Black);
     EXPECT_EQ(view.status, GameStatus::SkillSelect);
-    EXPECT_TRUE(view.winningLine.empty());
+    EXPECT_TRUE(view.lastClearedLines.empty());
+    EXPECT_EQ(view.scores, (std::array<int, 2>{0, 0}));
     EXPECT_EQ(view.opponentSkillRevealed, std::nullopt);
     for (int i = 0; i < 5; ++i) {
         EXPECT_TRUE(view.board.isEmpty({i, 0}));
@@ -109,7 +113,7 @@ TEST_F(CountdownRestartTest, G4_RestartKeepsPreviousSkillAsDefault) {
     GameController game{config};
     playBlackWin(game);
     game.restart();
-    EXPECT_EQ(game.viewFor(PlayerId::Black).self.skill, SkillId::Accelerate);
+    EXPECT_EQ(game.viewFor(PlayerId::Black).self.skill, SkillId::Dominate);
     EXPECT_EQ(game.viewFor(PlayerId::White).self.skill, SkillId::Bomb);
 
     // 不改選直接確定也可以開始
@@ -141,18 +145,7 @@ TEST_F(CountdownRestartTest, G4_S4_NewMatchStartsFresh) {
     EXPECT_EQ(view.now, 0);
     EXPECT_EQ(view.self.energy, 1);
     EXPECT_EQ(view.self.lastPlaceTime, std::nullopt);
-    EXPECT_EQ(view.self.skillReadyAt, 25000);  // S4：重新等一次完整冷卻
     EXPECT_TRUE(game.submit(PlaceAction{PlayerId::Black, {0, 0}}, 0).accepted);  // 舊棋子已清除
-}
-
-TEST_F(CountdownRestartTest, G4_RestartIgnoredWhileRunning) {
-    GameController game{config};
-    confirmBoth(game);
-    game.tick(0);
-    ASSERT_TRUE(game.submit(PlaceAction{PlayerId::Black, {7, 7}}, 0).accepted);
-    game.restart();
-    EXPECT_EQ(game.viewFor(PlayerId::Black).status, GameStatus::Running);
-    EXPECT_EQ(game.viewFor(PlayerId::Black).board.at({7, 7}), Cell::Black);
 }
 
 TEST_F(CountdownRestartTest, U7_SkillConfirmedSignalTellsWho) {
@@ -168,10 +161,89 @@ TEST_F(CountdownRestartTest, U7_SkillConfirmedSignalTellsWho) {
 
 TEST_F(CountdownRestartTest, G2_U2_CountdownViewShowsChosenSkillAndStartEnergy) {
     GameController game{config};
-    confirmBoth(game, SkillId::Bomb, SkillId::Accelerate);
+    confirmBoth(game, SkillId::Bomb, SkillId::Dominate);
     const PlayerView black = game.viewFor(PlayerId::Black);
     EXPECT_EQ(black.self.skill, SkillId::Bomb);
     EXPECT_EQ(black.self.energy, 1);
-    EXPECT_EQ(black.self.skillReadyAt, 20000);  // S4：從對局時間 0 起算的冷卻
-    EXPECT_EQ(game.viewFor(PlayerId::White).self.skill, SkillId::Accelerate);
+    EXPECT_EQ(game.viewFor(PlayerId::White).self.skill, SkillId::Dominate);
+}
+
+// ---- T11a：中途重開與中止（G4a、G4b、W5）----
+
+TEST_F(CountdownRestartTest, G4a_RestartDuringCountdown) {
+    GameController game{config};
+    confirmBoth(game);
+    game.tick(-1500);
+    game.restart();
+    const PlayerView view = game.viewFor(PlayerId::Black);
+    EXPECT_EQ(view.status, GameStatus::SkillSelect);
+    EXPECT_EQ(view.self.skill, SkillId::Dominate);  // 預設上一局的技能
+    game.confirmSkill(PlayerId::Black);
+    EXPECT_EQ(game.viewFor(PlayerId::Black).status, GameStatus::SkillSelect);  // 要重新確定
+}
+
+TEST_F(CountdownRestartTest, G4a_RestartDuringRunningResetsEverything) {
+    config.mode = MatchMode::TimeLimit;
+    config.startEnergy = config.maxEnergy;  // 開局就夠用技能
+    GameController game{config};
+    confirmBoth(game, SkillId::Destroy, SkillId::Dominate);
+    game.tick(0);
+    ASSERT_TRUE(game.submit(SkillAction{PlayerId::White, SkillId::Dominate, std::nullopt}, 0).accepted);
+    ASSERT_TRUE(game.submit(PlaceAction{PlayerId::White, {0, 14}}, 0).accepted);
+    ASSERT_TRUE(game.submit(SkillAction{PlayerId::Black, SkillId::Destroy, Pos{7, 7}}, 0).accepted);
+    for (int i = 0; i < 5; ++i) {
+        ASSERT_TRUE(game.submit(PlaceAction{PlayerId::Black, {i, 0}}, i * 1000).accepted);
+    }
+    ASSERT_EQ(game.viewFor(PlayerId::Black).scores[0], 5);
+    ASSERT_EQ(game.viewFor(PlayerId::Black).status, GameStatus::Running);
+
+    game.restart();
+    const PlayerView view = game.viewFor(PlayerId::Black);
+    EXPECT_EQ(view.status, GameStatus::SkillSelect);
+    EXPECT_EQ(view.scores, (std::array<int, 2>{0, 0}));
+    EXPECT_TRUE(view.zones.empty());
+    EXPECT_TRUE(view.lastClearedLines.empty());
+    EXPECT_EQ(view.board.at({7, 7}), Cell::Empty);  // 已摧毀的格子也清掉
+    EXPECT_EQ(view.board.at({0, 14}), Cell::Empty);
+
+    game.confirmSkill(PlayerId::Black);
+    game.confirmSkill(PlayerId::White);
+    game.tick(0);
+    EXPECT_FALSE(game.viewFor(PlayerId::Black).self.destroyUsed);
+    EXPECT_EQ(game.viewFor(PlayerId::White).self.dominateCharges, 0);
+}
+
+TEST_F(CountdownRestartTest, G4a_RestartDuringSkillSelectKeepsSelection) {
+    GameController game{config};
+    game.selectSkill(PlayerId::Black, SkillId::Bomb);
+    game.confirmSkill(PlayerId::Black);
+    game.restart();
+    EXPECT_EQ(game.viewFor(PlayerId::Black).status, GameStatus::SkillSelect);
+    EXPECT_EQ(game.viewFor(PlayerId::Black).self.skill, SkillId::Bomb);
+    game.selectSkill(PlayerId::Black, SkillId::Destroy);  // 確定被清掉，可以重選
+    EXPECT_EQ(game.viewFor(PlayerId::Black).self.skill, SkillId::Destroy);
+}
+
+TEST_F(CountdownRestartTest, W5_AbortEndsWithoutResult) {
+    GameController game{config};
+    std::vector<GameStatus> overs;
+    QObject::connect(&game, &GameController::gameOver,
+                     [&](GameStatus s, std::array<int, 2>) { overs.push_back(s); });
+    confirmBoth(game);
+    game.tick(0);
+    game.abort();
+    EXPECT_EQ(game.viewFor(PlayerId::Black).status, GameStatus::Aborted);
+    ASSERT_EQ(overs.size(), 1u);
+    EXPECT_EQ(overs[0], GameStatus::Aborted);
+    EXPECT_EQ(game.submit(PlaceAction{PlayerId::Black, {7, 7}}, 100).reason, RejectReason::GameNotRunning);
+    game.abort();  // 已結束時再中止不會重複發出
+    EXPECT_EQ(overs.size(), 1u);
+}
+
+TEST_F(CountdownRestartTest, G4b_AbortDuringSkillSelect) {
+    GameController game{config};
+    game.abort();
+    EXPECT_EQ(game.viewFor(PlayerId::Black).status, GameStatus::Aborted);
+    game.restart();
+    EXPECT_EQ(game.viewFor(PlayerId::Black).status, GameStatus::SkillSelect);
 }

@@ -1,17 +1,14 @@
 #pragma once
 
-#include <optional>
 #include <vector>
 
 #include "core/board.h"
 #include "core/types.h"
 
-// spec W1、W2
+// spec W1、W2、W6、B4
 class RuleChecker {
 public:
-    static constexpr int kWinLength = 5;
-
-    // 檢查剛下在 last 的那顆子是否造成連五；有的話回傳連線上所有棋子的座標（給 U6 用）。
-    // 長連回傳整條連線；多個方向同時成五時，合併所有連線（交叉點只出現一次）。
-    static std::optional<std::vector<Pos>> findFive(const Board&, Pos last);
+    // 回傳剛下在 last 的那顆子在每個方向形成的連線（≥ minLength 顆同色連續棋子），每個方向最多一條。
+    // 長連回傳整條（W2）；交叉時 last 會同時出現在多條線裡（W6）。已摧毀的格子與對手棋子一樣會截斷連線（B4）。
+    static std::vector<std::vector<Pos>> findLines(const Board&, Pos last, int minLength);
 };

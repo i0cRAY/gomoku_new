@@ -148,60 +148,32 @@ TEST(EnergyTest, E6_NextEnergyRatioIsZeroWhenFull) {
     EXPECT_DOUBLE_EQ(energy.nextEnergyRatio(stateWith(10)), 0.0);
 }
 
-TEST(EnergyTest, SA2_DoubleRegenWhileAccelerating) {
-    const EnergyManager energy(configWithInterval(2000));
-    PlayerState state = stateWith(1);
-    state.accelerateUntil = 5000;
-    energy.advance(state, 0, 2000);  // 進度 +4000
-    EXPECT_EQ(state.energy, 3);
-    EXPECT_EQ(state.regenProgress, 0);
-}
+// ---- S2：技能一次消耗多格 ----
 
-TEST(EnergyTest, SA2_AccelerateEndingMidIntervalSplitsTheGap) {
-    const EnergyManager energy(configWithInterval(3000));
-    PlayerState state = stateWith(1);
-    state.accelerateUntil = 1000;
-    energy.advance(state, 0, 3000);  // 1000 × 2 + 2000 × 1 = 4000
+TEST(EnergyTest, S2_ConsumeThreeAtOnce) {
+    const EnergyManager energy(configWithInterval(2000));
+    PlayerState state = stateWith(5, 700);
+    EXPECT_TRUE(energy.canConsume(state, 3));
+    energy.consume(state, 3);
     EXPECT_EQ(state.energy, 2);
-    EXPECT_EQ(state.regenProgress, 1000);
+    EXPECT_EQ(state.regenProgress, 700);  // E6：進度不變
 }
 
-TEST(EnergyTest, SA2_NormalRateAfterAccelerateExpired) {
+TEST(EnergyTest, S3_CannotConsumeMoreThanAvailable) {
     const EnergyManager energy(configWithInterval(2000));
-    PlayerState state = stateWith(1);
-    state.accelerateUntil = 5000;
-    energy.advance(state, 6000, 7000);
-    EXPECT_EQ(state.regenProgress, 1000);
+    const PlayerState state = stateWith(2);
+    EXPECT_FALSE(energy.canConsume(state, 3));
+    EXPECT_TRUE(energy.canConsume(state, 2));
 }
 
-TEST(EnergyTest, SA2_AccelerateResultDoesNotDependOnTickSize) {
-    const EnergyManager energy(configWithInterval(1500));
-    PlayerState oneStep = stateWith(0);
-    oneStep.accelerateUntil = 3333;
-    energy.advance(oneStep, 0, 7777);
-
-    PlayerState manySteps = stateWith(0);
-    manySteps.accelerateUntil = 3333;
-    for (TimeMs t = 0; t < 7777; t += 50) {
-        energy.advance(manySteps, t, std::min<TimeMs>(t + 50, 7777));
-    }
-    EXPECT_EQ(manySteps.energy, oneStep.energy);
-    EXPECT_EQ(manySteps.regenProgress, oneStep.regenProgress);
-}
-
-TEST(EnergyTest, SA4_AccelerateAtFullEnergyHasNoEffect) {
+TEST(EnergyTest, S2_E4_ConsumeThreeAtMaxRestartsFromZero) {
     const EnergyManager energy(configWithInterval(2000));
     PlayerState state = stateWith(10);
-    state.accelerateUntil = 5000;
     energy.advance(state, 0, 3000);
-    EXPECT_EQ(state.energy, 10);
+    energy.consume(state, 3);
+    EXPECT_EQ(state.energy, 7);
     EXPECT_EQ(state.regenProgress, 0);
-}
-
-TEST(EnergyTest, SA1_NoAccelerateMarkerMeansNormalRate) {
-    const EnergyManager energy(configWithInterval(2000));
-    PlayerState state = stateWith(1);  // accelerateUntil = 0：沒有加速
-    energy.advance(state, -3000, 1000);
-    EXPECT_EQ(state.energy, 3);
-    EXPECT_EQ(state.regenProgress, 0);
+    energy.advance(state, 3000, 5500);
+    EXPECT_EQ(state.energy, 8);
+    EXPECT_EQ(state.regenProgress, 500);
 }

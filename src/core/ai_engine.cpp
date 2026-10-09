@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <iterator>
 #include <vector>
 
 namespace {
@@ -18,7 +19,6 @@ constexpr int kReach = kWinLength - 1;           // 連五只會用到中心左�
 constexpr int kLineLength = 2 * kReach + 1;
 constexpr int kCenter = kReach;
 constexpr double kScoreEpsilon = 1e-9;  // 比較同分用
-constexpr int kAccelerateEnergyThreshold = 3;  // spec A8：能量 ≤ 3 時使用加速
 
 enum class LineCell { Own, Empty, Blocked };
 using Line = std::array<LineCell, kLineLength>;
@@ -112,28 +112,25 @@ Pattern twoLevel(Line line) {
 }  // namespace
 
 AIEngine::AIEngine(PlayerId self, TimeMs reactionTime, double defenseWeight, std::uint32_t seed,
-                   PatternScores scores, TimeMs placeCooldown)
+                   PatternScores scores, TimeMs placeCooldown, int skillEnergyCost)
     : self(self),
       reactionTime(reactionTime),
       defenseWeight(defenseWeight),
       rng(seed),
       scores(scores),
-      placeCooldown(placeCooldown) {}
+      placeCooldown(placeCooldown),
+      skillEnergyCost(skillEnergyCost) {}
 
 AIEngine AIEngine::fromConfig(PlayerId self, const MatchConfig& config, std::uint32_t seed) {
     const AIConfig& ai = config.ai;
-    TimeMs reaction = ai.reactionNormal;
-    switch (ai.difficulty) {
-        case Difficulty::Easy: reaction = ai.reactionEasy; break;
-        case Difficulty::Normal: reaction = ai.reactionNormal; break;
-        case Difficulty::Hard: reaction = ai.reactionHard; break;
-    }
-    return AIEngine(self, reaction, ai.defenseWeight, seed, ai.scores, config.placeCooldown);
+    return AIEngine(self, ai.reactionTime, ai.defenseWeight, seed, ai.scores, config.placeCooldown,
+                    config.skill.energyCost);
 }
 
 SkillId AIEngine::chooseSkill() {
-    std::uniform_int_distribution<int> pick(0, 1);
-    return pick(rng) == 0 ? SkillId::Accelerate : SkillId::Bomb;
+    constexpr SkillId kSkills[] = {SkillId::Bomb, SkillId::Dominate, SkillId::Destroy};  // A2a
+    std::uniform_int_distribution<std::size_t> pick(0, std::size(kSkills) - 1);
+    return kSkills[pick(rng)];
 }
 
 void AIEngine::newGame() {
@@ -185,10 +182,6 @@ std::optional<Action> AIEngine::decide(const PlayerView& view) {
     // A7：對手有活三
     if (const auto block = openThreeBlock(board)) {
         return place(block);
-    }
-    // A8：加速
-    if (view.self.energy <= kAccelerateEnergyThreshold && skillReady(view, SkillId::Accelerate)) {
-        return SkillAction{self, SkillId::Accelerate, std::nullopt};
     }
     // A9
     return placeable ? place(bestPlacement(board)) : std::nullopt;
@@ -248,7 +241,7 @@ bool AIEngine::canPlace(const PlayerView& view) const {
 }
 
 bool AIEngine::skillReady(const PlayerView& view, SkillId skill) const {
-    return view.self.skill == skill && view.now >= view.self.skillReadyAt;
+    return view.self.skill == skill && view.self.energy >= skillEnergyCost;  // S3：沒有冷卻，只看能量
 }
 
 std::vector<Pos> AIEngine::fivePoints(const Board& board, PlayerId player) const {

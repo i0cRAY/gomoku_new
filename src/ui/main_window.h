@@ -4,6 +4,7 @@
 #include <QLabel>
 #include <QMainWindow>
 #include <QPushButton>
+#include <QSpinBox>
 #include <QStackedWidget>
 
 #include <array>
@@ -17,9 +18,10 @@
 #include "ui/board_input.h"
 #include "ui/board_view.h"
 #include "ui/hud_view.h"
+#include "ui/score_board.h"
 #include "ui/skill_select_view.h"
 
-// 主視窗：主選單 → 技能選擇 → 對局 → 結果（spec G1、G1a、G2、G4、U6、U7、M3）。
+// 主視窗：主選單 → 技能選擇 → 對局 → 結果（spec G1、G1a、G1b、G2、G4、G4a、G4b、U6、U7、U8、U12、M3）。
 // 不保存遊戲狀態：收到 stateChanged 後用 viewFor 取得畫面資料。
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -36,6 +38,10 @@ private:
     MatchConfig configFromMenu() const;
     bool isLocal(PlayerId) const;
     void backToMenu();
+    void onRematchClicked();
+    void onMenuClicked();
+    bool confirmLeavingMatch(const QString& action);  // G4a：對局中按按鈕要先確認
+    void refreshModeWidgets();
     void refresh();
     void onRejected(PlayerId, RejectReason, std::optional<Pos>);
     void onBoardClicked(Pos, Qt::MouseButton);
@@ -51,13 +57,16 @@ private:
     QStackedWidget* pages;
     QWidget* menuPage;
     QComboBox* intervalBox;
-    QComboBox* difficultyBox;
+    QComboBox* modeBox;
+    QComboBox* timeLimitBox;
+    QSpinBox* targetScoreBox;
     SkillSelectView* skillPage;
     QWidget* gamePage;
     BoardView* board;
     HudView* blackHud;
     HudView* whiteHud;
     QLabel* banner;
+    ScoreBoard* scoreBoard;
     QPushButton* rematchButton;
     QPushButton* menuButton;
 

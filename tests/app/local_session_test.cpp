@@ -50,7 +50,7 @@ TEST_F(LocalSessionTest, G1a_ForwardsSelectionAndState) {
 
 TEST_F(LocalSessionTest, U7_OpponentReadyOnlyForOpponent) {
     session.selectSkill(PlayerId::Black, SkillId::Bomb);
-    session.selectSkill(PlayerId::White, SkillId::Accelerate);
+    session.selectSkill(PlayerId::White, SkillId::Dominate);
     session.confirmSkill(PlayerId::Black);
     EXPECT_EQ(opponentReadyCount, 0);  // 自己確定不算
     session.confirmSkill(PlayerId::White);
@@ -60,7 +60,7 @@ TEST_F(LocalSessionTest, U7_OpponentReadyOnlyForOpponent) {
 TEST_F(LocalSessionTest, G2_ClockStartsWhenCountdownBegins) {
     EXPECT_FALSE(session.clock().isRunning());
     session.selectSkill(PlayerId::Black, SkillId::Bomb);
-    session.selectSkill(PlayerId::White, SkillId::Accelerate);
+    session.selectSkill(PlayerId::White, SkillId::Dominate);
     session.confirmSkill(PlayerId::Black);
     EXPECT_FALSE(session.clock().isRunning());
     session.confirmSkill(PlayerId::White);
@@ -71,7 +71,7 @@ TEST_F(LocalSessionTest, G2_ClockStartsWhenCountdownBegins) {
 
 TEST_F(LocalSessionTest, G3_RequestDuringCountdownIsRejected) {
     session.selectSkill(PlayerId::Black, SkillId::Bomb);
-    session.selectSkill(PlayerId::White, SkillId::Accelerate);
+    session.selectSkill(PlayerId::White, SkillId::Dominate);
     session.confirmSkill(PlayerId::Black);
     session.confirmSkill(PlayerId::White);
     session.request(PlaceAction{PlayerId::Black, {7, 7}});
@@ -79,12 +79,32 @@ TEST_F(LocalSessionTest, G3_RequestDuringCountdownIsRejected) {
     EXPECT_EQ(rejections[0], RejectReason::GameNotRunning);
 }
 
-TEST_F(LocalSessionTest, G4_RematchIgnoredBeforeGameOver) {
+TEST_F(LocalSessionTest, G4a_RematchDuringCountdownGoesBackToSkillSelect) {
     session.selectSkill(PlayerId::Black, SkillId::Bomb);
-    session.selectSkill(PlayerId::White, SkillId::Accelerate);
+    session.selectSkill(PlayerId::White, SkillId::Dominate);
     session.confirmSkill(PlayerId::Black);
     session.confirmSkill(PlayerId::White);
     session.requestRematch();
+    EXPECT_EQ(session.viewFor(PlayerId::Black).status, GameStatus::SkillSelect);
+    EXPECT_FALSE(session.clock().isRunning());
+
+    session.confirmSkill(PlayerId::Black);  // 預設上一局的技能，直接確定就能再開始
+    session.confirmSkill(PlayerId::White);
     EXPECT_EQ(session.viewFor(PlayerId::Black).status, GameStatus::Countdown);
     EXPECT_TRUE(session.clock().isRunning());
+}
+
+TEST_F(LocalSessionTest, G4a_LeaveAbortsAndStopsClock) {
+    session.selectSkill(PlayerId::Black, SkillId::Bomb);
+    session.selectSkill(PlayerId::White, SkillId::Dominate);
+    session.confirmSkill(PlayerId::Black);
+    session.confirmSkill(PlayerId::White);
+    session.leave();
+    EXPECT_EQ(session.viewFor(PlayerId::Black).status, GameStatus::Aborted);
+    EXPECT_FALSE(session.clock().isRunning());
+}
+
+TEST_F(LocalSessionTest, N9_AnswerRematchIsNoOpLocally) {
+    session.answerRematch(true);
+    EXPECT_EQ(session.viewFor(PlayerId::Black).status, GameStatus::SkillSelect);
 }
