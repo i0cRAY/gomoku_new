@@ -17,6 +17,7 @@ add_library(gomoku_core STATIC
     src/core/rule_checker.cpp
     src/core/energy_manager.cpp
     src/core/skill_system.cpp
+    src/core/ai_engine.cpp
 )
 target_include_directories(gomoku_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
@@ -84,6 +85,7 @@ if(BUILD_TESTING)
         tests/core/rule_checker_test.cpp
         tests/core/energy_manager_test.cpp
         tests/core/skill_system_test.cpp
+        tests/core/ai_pattern_test.cpp
     )
     target_link_libraries(core_tests PRIVATE gomoku_core GTest::gtest_main)
     gtest_discover_tests(core_tests)
