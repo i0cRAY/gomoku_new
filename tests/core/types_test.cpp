@@ -36,6 +36,7 @@ TEST(ConfigTest, Sec4To8_DefaultsMatchSpecTables) {
     EXPECT_EQ(config.skill.accelerateCooldown, 25000);
     EXPECT_EQ(config.skill.accelerateDuration, 5000);
     EXPECT_EQ(config.skill.bombCooldown, 20000);
+    EXPECT_EQ(config.skill.accelerateRegenMultiplier, 2);
     EXPECT_EQ(config.ai.reactionEasy, 1200);
     EXPECT_EQ(config.ai.reactionNormal, 700);
     EXPECT_EQ(config.ai.reactionHard, 350);

@@ -35,7 +35,7 @@
 
     - 測試：正常回能；`E3` 一次經過 10 秒能補到上限；`E4` 滿格時進度歸零；`consume` 之後從 0 開始累積
     - `nextEnergyRatio`（E6）：進度 1000 / T 2000 時為 0.5；滿格時為 0
-- [ ] **T07 SkillSystem：冷卻框架 + 加速**　規格：S1–S6、S1a、SA1–SA5
+- [x] **T07 SkillSystem：冷卻框架 + 加速**　規格：S1–S6、S1a、SA1–SA5
 
     - EnergyManager 的 `advance` 要處理加速在區間中途開始或結束的情況
     - 測試：開局技能在冷卻中（S4）；冷卻中被拒；使用沒選的技能被拒（`SKILL_NOT_OWNED`）；加速期間回能 2 倍；加速剛好在 `advance` 區間中間結束時，前後兩段分開計算

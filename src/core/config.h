@@ -11,6 +11,7 @@ enum class Difficulty : std::uint8_t { Easy, Normal, Hard };
 struct SkillConfig {
     TimeMs accelerateCooldown = 25000;  // spec SA
     TimeMs accelerateDuration = 5000;
+    int accelerateRegenMultiplier = 2;  // spec SA2：加速期間回能進度的倍率
     TimeMs bombCooldown = 20000;  // spec SB
 };
 

@@ -147,3 +147,61 @@ TEST(EnergyTest, E6_NextEnergyRatioIsZeroWhenFull) {
     const EnergyManager energy(configWithInterval(2000));
     EXPECT_DOUBLE_EQ(energy.nextEnergyRatio(stateWith(10)), 0.0);
 }
+
+TEST(EnergyTest, SA2_DoubleRegenWhileAccelerating) {
+    const EnergyManager energy(configWithInterval(2000));
+    PlayerState state = stateWith(1);
+    state.accelerateUntil = 5000;
+    energy.advance(state, 0, 2000);  // 進度 +4000
+    EXPECT_EQ(state.energy, 3);
+    EXPECT_EQ(state.regenProgress, 0);
+}
+
+TEST(EnergyTest, SA2_AccelerateEndingMidIntervalSplitsTheGap) {
+    const EnergyManager energy(configWithInterval(3000));
+    PlayerState state = stateWith(1);
+    state.accelerateUntil = 1000;
+    energy.advance(state, 0, 3000);  // 1000 × 2 + 2000 × 1 = 4000
+    EXPECT_EQ(state.energy, 2);
+    EXPECT_EQ(state.regenProgress, 1000);
+}
+
+TEST(EnergyTest, SA2_NormalRateAfterAccelerateExpired) {
+    const EnergyManager energy(configWithInterval(2000));
+    PlayerState state = stateWith(1);
+    state.accelerateUntil = 5000;
+    energy.advance(state, 6000, 7000);
+    EXPECT_EQ(state.regenProgress, 1000);
+}
+
+TEST(EnergyTest, SA2_AccelerateResultDoesNotDependOnTickSize) {
+    const EnergyManager energy(configWithInterval(1500));
+    PlayerState oneStep = stateWith(0);
+    oneStep.accelerateUntil = 3333;
+    energy.advance(oneStep, 0, 7777);
+
+    PlayerState manySteps = stateWith(0);
+    manySteps.accelerateUntil = 3333;
+    for (TimeMs t = 0; t < 7777; t += 50) {
+        energy.advance(manySteps, t, std::min<TimeMs>(t + 50, 7777));
+    }
+    EXPECT_EQ(manySteps.energy, oneStep.energy);
+    EXPECT_EQ(manySteps.regenProgress, oneStep.regenProgress);
+}
+
+TEST(EnergyTest, SA4_AccelerateAtFullEnergyHasNoEffect) {
+    const EnergyManager energy(configWithInterval(2000));
+    PlayerState state = stateWith(10);
+    state.accelerateUntil = 5000;
+    energy.advance(state, 0, 3000);
+    EXPECT_EQ(state.energy, 10);
+    EXPECT_EQ(state.regenProgress, 0);
+}
+
+TEST(EnergyTest, SA1_NoAccelerateMarkerMeansNormalRate) {
+    const EnergyManager energy(configWithInterval(2000));
+    PlayerState state = stateWith(1);  // accelerateUntil = 0：沒有加速
+    energy.advance(state, -3000, 1000);
+    EXPECT_EQ(state.energy, 3);
+    EXPECT_EQ(state.regenProgress, 0);
+}

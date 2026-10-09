@@ -4,12 +4,12 @@
 #include "core/player_state.h"
 #include "core/types.h"
 
-// spec E1–E4、E6
+// spec E1–E4、E6、SA2
 class EnergyManager {
 public:
     explicit EnergyManager(const MatchConfig&);  // 使用 regenInterval、maxEnergy
 
-    // 把 state 從 from 推進到 to，套用回能規則。結果與呼叫頻率無關（E3）
+    // 把 state 從 from 推進到 to，套用回能規則（含加速在區間中途結束的情況）。結果與呼叫頻率無關（E3）
     void advance(PlayerState&, TimeMs from, TimeMs to) const;
     bool canConsume(const PlayerState&) const;
     void consume(PlayerState&) const;  // 呼叫前必須先通過 canConsume
@@ -17,6 +17,9 @@ public:
     double nextEnergyRatio(const PlayerState&) const;
 
 private:
+    TimeMs effectiveElapsed(const PlayerState&, TimeMs from, TimeMs to) const;
+
     TimeMs regenInterval;
     int maxEnergy;
+    int accelerateMultiplier;
 };
