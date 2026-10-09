@@ -39,7 +39,7 @@
 
     - EnergyManager 的 `advance` 要處理加速在區間中途開始或結束的情況
     - 測試：開局技能在冷卻中（S4）；冷卻中被拒；使用沒選的技能被拒（`SKILL_NOT_OWNED`）；加速期間回能 2 倍；加速剛好在 `advance` 區間中間結束時，前後兩段分開計算
-- [ ] **T08 SkillSystem：炸彈**　規格：SB1–SB4
+- [x] **T08 SkillSystem：炸彈**　規格：SB1–SB4
 
     - 測試：炸對手成功、目標變空；炸空格、炸自己的子都被拒（`INVALID_TARGET`）；SB4 檢查順序
 

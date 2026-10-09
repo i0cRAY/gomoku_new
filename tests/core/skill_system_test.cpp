@@ -132,3 +132,85 @@ TEST_F(SkillTest, SA5_AccelerateIgnoresTarget) {
     const SkillAction withTarget{PlayerId::Black, SkillId::Accelerate, Pos{-5, 99}};
     EXPECT_EQ(skills.check(withTarget, state, board, 25000), std::nullopt);
 }
+
+// ---- 炸彈（T08）----
+
+class BombTest : public SkillTest {
+protected:
+    // 黑方選炸彈、冷卻已好；棋盤上 (3,3) 是白子、(4,4) 是黑子
+    void SetUp() override {
+        bomber = playerWith(SkillId::Bomb);
+        skills.initPlayer(bomber, 0);
+        board.set({3, 3}, Cell::White);
+        board.set({4, 4}, Cell::Black);
+    }
+
+    static constexpr TimeMs kReady = 20000;
+    PlayerState bomber;
+};
+
+TEST_F(BombTest, SB3_BombRemovesOpponentStone) {
+    ASSERT_EQ(skills.check(bombAt({3, 3}), bomber, board, kReady), std::nullopt);
+    skills.apply(bombAt({3, 3}), bomber, board, kReady);
+    EXPECT_TRUE(board.isEmpty({3, 3}));
+    EXPECT_EQ(board.at({4, 4}), Cell::Black);  // 其他格子不受影響
+}
+
+TEST_F(BombTest, SB3_WhiteCanBombBlackStone) {
+    PlayerState whiteBomber = playerWith(SkillId::Bomb);
+    skills.initPlayer(whiteBomber, 0);
+    const SkillAction action{PlayerId::White, SkillId::Bomb, Pos{4, 4}};
+    ASSERT_EQ(skills.check(action, whiteBomber, board, kReady), std::nullopt);
+    skills.apply(action, whiteBomber, board, kReady);
+    EXPECT_TRUE(board.isEmpty({4, 4}));
+}
+
+TEST_F(BombTest, S6_BombRestartsCooldown) {
+    skills.apply(bombAt({3, 3}), bomber, board, 30000);
+    EXPECT_EQ(bomber.skillReadyAt, 50000);
+}
+
+TEST_F(BombTest, S2_BombDoesNotUseEnergy) {
+    bomber.energy = 0;
+    EXPECT_EQ(skills.check(bombAt({3, 3}), bomber, board, kReady), std::nullopt);
+    skills.apply(bombAt({3, 3}), bomber, board, kReady);
+    EXPECT_EQ(bomber.energy, 0);
+}
+
+TEST_F(BombTest, SB2_EmptyTargetIsInvalid) {
+    EXPECT_EQ(skills.check(bombAt({0, 0}), bomber, board, kReady), RejectReason::InvalidTarget);
+}
+
+TEST_F(BombTest, SB2_OwnStoneIsInvalid) {
+    EXPECT_EQ(skills.check(bombAt({4, 4}), bomber, board, kReady), RejectReason::InvalidTarget);
+}
+
+TEST_F(BombTest, SB2_OutOfBoardTarget) {
+    EXPECT_EQ(skills.check(bombAt({-1, 3}), bomber, board, kReady), RejectReason::OutOfBoard);
+    EXPECT_EQ(skills.check(bombAt({3, 15}), bomber, board, kReady), RejectReason::OutOfBoard);
+}
+
+TEST_F(BombTest, SB5_MissingTargetIsInvalid) {
+    const SkillAction noTarget{PlayerId::Black, SkillId::Bomb, std::nullopt};
+    EXPECT_EQ(skills.check(noTarget, bomber, board, kReady), RejectReason::InvalidTarget);
+}
+
+TEST_F(BombTest, SB4_NotOwnedBeforeOutOfBoard) {
+    PlayerState accelerateOwner = playerWith(SkillId::Accelerate);
+    skills.initPlayer(accelerateOwner, 0);
+    EXPECT_EQ(skills.check(bombAt({-1, -1}), accelerateOwner, board, kReady), RejectReason::SkillNotOwned);
+}
+
+TEST_F(BombTest, SB4_OutOfBoardBeforeCooldown) {
+    EXPECT_EQ(skills.check(bombAt({15, 15}), bomber, board, 0), RejectReason::OutOfBoard);
+}
+
+TEST_F(BombTest, SB4_SB5_MissingTargetCheckedWhereOutOfBoardIs) {
+    const SkillAction noTarget{PlayerId::Black, SkillId::Bomb, std::nullopt};
+    EXPECT_EQ(skills.check(noTarget, bomber, board, 0), RejectReason::InvalidTarget);  // 排在冷卻之前
+}
+
+TEST_F(BombTest, SB4_CooldownBeforeInvalidTarget) {
+    EXPECT_EQ(skills.check(bombAt({0, 0}), bomber, board, 0), RejectReason::SkillCooldown);
+    EXPECT_EQ(skills.check(bombAt({4, 4}), bomber, board, 0), RejectReason::SkillCooldown);
+}
