@@ -43,11 +43,7 @@ ActionResult GameController::submit(const Action& action, TimeMs now) {
     if (const auto* place = std::get_if<PlaceAction>(&action)) {
         return submitPlace(*place, std::max(now, lastTime));
     }
-    const auto& skill = std::get<SkillAction>(action);
-    if (status != GameStatus::Running) {
-        return reject(skill.player, RejectReason::GameNotRunning, skill.target);  // G3
-    }
-    return ActionResult{false, std::nullopt};  // 技能請求於 T10 實作
+    return submitSkill(std::get<SkillAction>(action), std::max(now, lastTime));
 }
 
 void GameController::tick(TimeMs now) {
@@ -65,6 +61,12 @@ PlayerView GameController::viewFor(PlayerId player) const {
     view.status = status;
     view.now = lastTime;
     view.self = state(player);
+    if (status == GameStatus::SkillSelect && selectedSkill[indexOf(player)]) {
+        view.self.skill = *selectedSkill[indexOf(player)];  // 只有自己的選擇（S1）
+    }
+    if (skillRevealed[indexOf(opponent(player))]) {
+        view.opponentSkillRevealed = state(opponent(player)).skill;
+    }
     view.nextEnergyRatio = energy.nextEnergyRatio(view.self);
     view.accelerating = view.self.accelerateUntil != 0 && lastTime < view.self.accelerateUntil;
     view.countdownRemaining = status == GameStatus::Countdown ? std::max<TimeMs>(0, -lastTime) : 0;
@@ -91,6 +93,7 @@ void GameController::advanceTo(TimeMs now) {
 void GameController::startMatch() {
     status = GameStatus::Running;
     lastTime = 0;
+    skillRevealed = {};
     for (PlayerId p : {PlayerId::Black, PlayerId::White}) {
         PlayerState& s = state(p);
         s = PlayerState{};
@@ -131,6 +134,22 @@ ActionResult GameController::submitPlace(const PlaceAction& action, TimeMs now) 
     } else {
         emit stateChanged();
     }
+    return ActionResult{true, std::nullopt};
+}
+
+// SA5：GAME_NOT_RUNNING → SKILL_NOT_OWNED → SKILL_COOLDOWN
+// SB4：GAME_NOT_RUNNING → SKILL_NOT_OWNED → OUT_OF_BOARD → SKILL_COOLDOWN → INVALID_TARGET
+ActionResult GameController::submitSkill(const SkillAction& action, TimeMs now) {
+    if (status != GameStatus::Running) {
+        return reject(action.player, RejectReason::GameNotRunning, action.target);  // G3
+    }
+    PlayerState& s = state(action.player);
+    if (const auto reason = skills.check(action, s, board, now)) {
+        return reject(action.player, *reason, action.target);
+    }
+    skills.apply(action, s, board, now);  // W3：炸彈不觸發勝負判斷
+    skillRevealed[indexOf(action.player)] = true;  // S1：對手從此看得到這項技能
+    emit stateChanged();
     return ActionResult{true, std::nullopt};
 }
 

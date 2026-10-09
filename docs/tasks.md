@@ -52,7 +52,7 @@
     - 用 GoogleTest + `QCoreApplication`，手動指定時間
     - 測試：P1 每一種拒絕原因各一個；P3 被拒不扣能量；P4 第一子不受間隔限制；成五後 `gameOver` 帶著正確的連線；和局；結束後請求被拒
     - `viewFor(Black)` 的 `self` 是黑方的狀態、`nextEnergyRatio` 正確（E5、E6）
-- [ ] **T10 GameController：技能選擇與使用**　規格：G1a、G3、S1、S1a、S2–S6、SA*、SB*
+- [x] **T10 GameController：技能選擇與使用**　規格：G1a、G3、S1、S1a、S2–S6、SA*、SB*
 
     - 測試：選擇階段可以改選，按確定後不能改；雙方都確定後才進入倒數；選擇階段下子被拒； 兩人選同一技能也可以；透過 `submit` 使用自己的技能；W3 炸彈不觸發勝負；`viewFor` 看不到對手選了什麼
 - [ ] **T11 GameClock 與倒數**　規格：G2、G4

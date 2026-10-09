@@ -36,6 +36,7 @@ private:
     void advanceTo(TimeMs now);
     void startMatch();
     ActionResult submitPlace(const PlaceAction&, TimeMs now);
+    ActionResult submitSkill(const SkillAction&, TimeMs now);
     ActionResult reject(PlayerId, RejectReason, std::optional<Pos>);
     void finish(GameStatus, std::vector<Pos> line);
 
@@ -51,6 +52,7 @@ private:
     std::array<PlayerState, 2> players{};
     std::array<std::optional<SkillId>, 2> selectedSkill{};
     std::array<bool, 2> confirmed{};
+    std::array<bool, 2> skillRevealed{};  // 是否已經用過技能（S1：用過後對手才知道）
     TimeMs lastTime = 0;  // 最後一次推進到的對局時間
     std::vector<Pos> winningLine;
 };

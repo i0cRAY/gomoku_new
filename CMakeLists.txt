@@ -67,6 +67,7 @@ if(BUILD_TESTING)
     add_executable(app_tests
         tests/app/main.cpp
         tests/app/game_controller_test.cpp
+        tests/app/game_controller_skill_test.cpp
     )
     target_link_libraries(app_tests PRIVATE gomoku_app GTest::gtest)
     gtest_discover_tests(app_tests)
