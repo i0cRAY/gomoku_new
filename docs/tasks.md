@@ -55,7 +55,7 @@
 - [x] **T10 GameController：技能選擇與使用**　規格：G1a、G3、S1、S1a、S2–S6、SA*、SB*
 
     - 測試：選擇階段可以改選，按確定後不能改；雙方都確定後才進入倒數；選擇階段下子被拒； 兩人選同一技能也可以；透過 `submit` 使用自己的技能；W3 炸彈不觸發勝負；`viewFor` 看不到對手選了什麼
-- [ ] **T11 GameClock 與倒數**　規格：G2、G4
+- [x] **T11 GameClock 與倒數**　規格：G2、G4
 
     - GameClock 每 50 ms tick；倒數 3 秒後狀態變成 Running；`restart()` 重置所有狀態
     - 實作 `GameSession` 介面與 `LocalSession`（design §4.6）

@@ -29,11 +29,15 @@ void GameController::confirmSkill(PlayerId player) {
     if (status != GameStatus::SkillSelect || !selectedSkill[indexOf(player)]) {
         return;  // G1a：尚未選技能時不能確定
     }
+    if (confirmed[indexOf(player)]) {
+        return;
+    }
     confirmed[indexOf(player)] = true;
     if (confirmed[0] && confirmed[1]) {
         status = GameStatus::Countdown;  // G2
         lastTime = -config.countdown;
     }
+    emit skillConfirmed(player);
     emit stateChanged();
 }
 
@@ -72,6 +76,22 @@ PlayerView GameController::viewFor(PlayerId player) const {
     view.countdownRemaining = status == GameStatus::Countdown ? std::max<TimeMs>(0, -lastTime) : 0;
     view.winningLine = winningLine;
     return view;
+}
+
+void GameController::restart() {
+    if (status != GameStatus::BlackWon && status != GameStatus::WhiteWon && status != GameStatus::Draw &&
+        status != GameStatus::Aborted) {
+        return;
+    }
+    // selectedSkill 保留，作為這一局的預設選擇（G4）
+    status = GameStatus::SkillSelect;
+    board.clear();
+    players = {};
+    confirmed = {};
+    skillRevealed = {};
+    winningLine.clear();
+    lastTime = 0;
+    emit stateChanged();
 }
 
 void GameController::advanceTo(TimeMs now) {

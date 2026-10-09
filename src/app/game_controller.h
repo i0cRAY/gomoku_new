@@ -26,11 +26,13 @@ public:
     ActionResult submit(const Action&, TimeMs now);  // 依 spec P1 / SA5 / SB4 的順序檢查
     void tick(TimeMs now);                           // 推進倒數與能量
     PlayerView viewFor(PlayerId) const;
+    void restart();  // G4：對局結束後才有效；保留設定與上一局的技能選擇，其餘全部重置
 
 signals:
     void stateChanged();  // 收到後呼叫 viewFor(自己) 取資料
     void actionRejected(PlayerId, RejectReason, std::optional<Pos>);
     void gameOver(GameStatus, std::vector<Pos> winningLine);
+    void skillConfirmed(PlayerId);  // 某位玩家按下確定（只告知是誰，不透露選了什麼，spec S1、U7）
 
 private:
     void advanceTo(TimeMs now);
