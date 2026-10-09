@@ -52,7 +52,7 @@ if(BUILD_TESTING)
     include(GoogleTest)
 
     add_executable(core_tests
-        tests/core/build_test.cpp
+        tests/core/types_test.cpp
     )
     target_link_libraries(core_tests PRIVATE gomoku_core GTest::gtest_main)
     gtest_discover_tests(core_tests)

@@ -20,7 +20,7 @@
 
 ## Phase 1　核心邏輯（`src/core`，不得 include Qt）
 
-- [ ] **T03 核心型別** `types.h`
+- [x] **T03 核心型別** `types.h`
 
     - 依 design §3 定義型別
     - 完成條件：能編譯；`opponent()` 有測試
