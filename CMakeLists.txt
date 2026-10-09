@@ -87,6 +87,7 @@ if(BUILD_TESTING)
         tests/core/skill_system_test.cpp
         tests/core/ai_pattern_test.cpp
         tests/core/ai_score_test.cpp
+        tests/core/ai_decision_test.cpp
     )
     target_link_libraries(core_tests PRIVATE gomoku_core GTest::gtest_main)
     gtest_discover_tests(core_tests)
@@ -97,6 +98,7 @@ if(BUILD_TESTING)
         tests/app/game_controller_skill_test.cpp
         tests/app/countdown_restart_test.cpp
         tests/app/local_session_test.cpp
+        tests/app/ai_controller_test.cpp
     )
     target_link_libraries(app_tests PRIVATE gomoku_app GTest::gtest)
     gtest_discover_tests(app_tests)

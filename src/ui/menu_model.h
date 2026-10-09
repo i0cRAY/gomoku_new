@@ -12,6 +12,9 @@
 std::vector<TimeMs> regenIntervalOptions();     // G1：500–10000 ms，500 的倍數
 std::size_t defaultRegenIntervalIndex();        // 預設值（MatchConfig 的 regenInterval）在選項中的位置
 std::string regenIntervalLabel(TimeMs interval);
+std::vector<Difficulty> difficultyOptions();    // M1：簡單、普通、困難
+std::size_t defaultDifficultyIndex();
+std::string difficultyLabel(Difficulty);
 std::string skillDescription(SkillId, const SkillConfig&);  // U7：效果說明與冷卻時間
 std::string countdownText(TimeMs remaining);    // G2：3、2、1
 std::string resultText(GameStatus);             // U6：勝方或和局；未結束時為空字串

@@ -30,7 +30,11 @@ private:
     QWidget* buildMenuPage();
     QWidget* buildGamePage();
 
+    void startVsAI();      // M1：玩家為黑方，AI 為白方
     void startLocalDev();  // M3
+    void startSession(std::vector<PlayerId> players);
+    MatchConfig configFromMenu() const;
+    bool isLocal(PlayerId) const;
     void backToMenu();
     void refresh();
     void onRejected(PlayerId, RejectReason, std::optional<Pos>);
@@ -47,6 +51,7 @@ private:
     QStackedWidget* pages;
     QWidget* menuPage;
     QComboBox* intervalBox;
+    QComboBox* difficultyBox;
     SkillSelectView* skillPage;
     QWidget* gamePage;
     BoardView* board;

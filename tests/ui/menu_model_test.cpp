@@ -77,3 +77,20 @@ TEST(MenuModelTest, G4_IsFinished) {
     EXPECT_FALSE(isFinished(GameStatus::Countdown));
     EXPECT_FALSE(isFinished(GameStatus::SkillSelect));
 }
+
+// ---- G1、M1：AI 難度 ----
+
+TEST(MenuModelTest, G1_M1_DifficultyOptionsInOrder) {
+    const auto options = difficultyOptions();
+    ASSERT_EQ(options.size(), 3u);
+    EXPECT_EQ(options[0], Difficulty::Easy);
+    EXPECT_EQ(options[1], Difficulty::Normal);
+    EXPECT_EQ(options[2], Difficulty::Hard);
+    EXPECT_EQ(options[defaultDifficultyIndex()], MatchConfig{}.ai.difficulty);
+}
+
+TEST(MenuModelTest, A2_DifficultyLabels) {
+    EXPECT_EQ(difficultyLabel(Difficulty::Easy), "簡單");
+    EXPECT_EQ(difficultyLabel(Difficulty::Normal), "普通");
+    EXPECT_EQ(difficultyLabel(Difficulty::Hard), "困難");
+}

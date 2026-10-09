@@ -41,3 +41,10 @@ void LocalSession::requestRematch() {
         gameClock.stop();
     }
 }
+
+void LocalSession::attachAI(PlayerId player, std::uint32_t seed) {
+    controller.attachAI(player, AIEngine::fromConfig(player, config, seed));
+    if (controller.viewFor(player).status == GameStatus::Countdown && !gameClock.isRunning()) {
+        gameClock.start(-config.countdown);
+    }
+}

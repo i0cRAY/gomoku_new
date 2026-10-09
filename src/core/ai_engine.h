@@ -3,9 +3,11 @@
 #include <cstdint>
 #include <optional>
 #include <random>
+#include <vector>
 
 #include "core/board.h"
 #include "core/config.h"
+#include "core/player_view.h"
 #include "core/types.h"
 
 // 棋型（spec §8.2），由強到弱
@@ -17,7 +19,15 @@ public:
     static constexpr int kDirectionCount = 4;  // 橫、直、右下斜、右上斜
 
     AIEngine(PlayerId self, TimeMs reactionTime, double defenseWeight, std::uint32_t seed,
-             PatternScores scores = {});
+             PatternScores scores = {}, TimeMs placeCooldown = MatchConfig{}.placeCooldown);
+    // 依設定建立：反應時間取自難度（A2），w、評分表與下子間隔取自設定
+    static AIEngine fromConfig(PlayerId self, const MatchConfig&, std::uint32_t seed);
+
+    SkillId chooseSkill();  // A2a：技能選擇階段隨機選一項
+    // A1–A9：反應時間未到，或判斷本次不行動時回傳 nullopt。
+    // 只拿得到自己的 PlayerView，讀不到對手的能量與冷卻（A3、E5）
+    std::optional<Action> decide(const PlayerView&);
+    void newGame();  // 新的一局對局時間從 0 重新開始，重設反應時間的計時
 
     // pos 必須是空格：回傳假設 player 下在 pos 後，dirIndex 方向最強的棋型；邊界與對手棋子視為擋住
     static Pattern patternAt(const Board&, Pos, PlayerId, int dirIndex);
@@ -29,11 +39,27 @@ public:
     std::optional<Pos> bestPlacement(const Board&);
 
 private:
+    struct Threat {
+        int fivePoints;
+        double bestAttack;
+        bool operator<(const Threat& other) const;
+    };
+
     double sideScore(const Board&, Pos, PlayerId) const;
+    bool canPlace(const PlayerView&) const;
+    bool skillReady(const PlayerView&, SkillId) const;
+    std::vector<Pos> fivePoints(const Board&, PlayerId) const;
+    Threat threatOf(const Board&) const;  // 對手的威脅分（spec A5）：成五點數量，再比全盤最高進攻分
+    std::optional<Action> respondToFivePoints(const PlayerView&, const std::vector<Pos>& points);
+    std::optional<Pos> bestBombTarget(const Board&, const std::vector<Pos>& points) const;
+    std::optional<Pos> openThreeBlock(const Board&) const;  // A7
+    std::optional<Pos> highestScore(const Board&, const std::vector<Pos>& candidates) const;
 
     PlayerId self;
     TimeMs reactionTime;
     double defenseWeight;
     std::mt19937 rng;
     PatternScores scores;
+    TimeMs placeCooldown;
+    std::optional<TimeMs> lastDecision;
 };

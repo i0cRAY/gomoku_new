@@ -56,7 +56,33 @@ void GameController::tick(TimeMs now) {
         return;
     }
     advanceTo(now);
+    runAIs(now);
     emit stateChanged();
+}
+
+void GameController::attachAI(PlayerId player, AIEngine ai) {
+    ais[indexOf(player)] = std::move(ai);
+    if (status == GameStatus::SkillSelect) {
+        letAIChooseSkill(player);
+    }
+}
+
+void GameController::letAIChooseSkill(PlayerId player) {
+    auto& ai = ais[indexOf(player)];
+    selectSkill(player, ai->chooseSkill());  // A2a
+    confirmSkill(player);
+}
+
+void GameController::runAIs(TimeMs now) {
+    for (PlayerId p : {PlayerId::Black, PlayerId::White}) {
+        auto& ai = ais[indexOf(p)];
+        if (!ai || status != GameStatus::Running) {
+            continue;
+        }
+        if (const auto action = ai->decide(viewFor(p))) {
+            submit(*action, now);  // A1：和玩家走同一套規則檢查
+        }
+    }
 }
 
 PlayerView GameController::viewFor(PlayerId player) const {
@@ -93,6 +119,11 @@ void GameController::restart() {
     winningLine.clear();
     lastTime = 0;
     emit stateChanged();
+    for (PlayerId p : {PlayerId::Black, PlayerId::White}) {
+        if (ais[indexOf(p)]) {
+            letAIChooseSkill(p);  // A2a：每一局重新隨機選技能
+        }
+    }
 }
 
 void GameController::advanceTo(TimeMs now) {
@@ -118,6 +149,11 @@ void GameController::startMatch() {
 
 void GameController::initPlayers() {
     skillRevealed = {};
+    for (auto& ai : ais) {
+        if (ai) {
+            ai->newGame();
+        }
+    }
     for (PlayerId p : {PlayerId::Black, PlayerId::White}) {
         PlayerState& s = state(p);
         s = PlayerState{};

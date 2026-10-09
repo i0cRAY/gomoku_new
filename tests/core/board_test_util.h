@@ -3,12 +3,14 @@
 #include <initializer_list>
 #include <stdexcept>
 #include <string_view>
+#include <vector>
 
 #include "core/board.h"
 
 // 測試輔助：用字串建立棋盤。每個字串是一列（第 0 個是 y = 0），字元依序對應 x = 0, 1, 2…
 // '.' 空、'X' 黑、'O' 白；沒寫到的格子都是空的。
-inline Board boardFromRows(std::initializer_list<std::string_view> rows) {
+template <typename Rows>
+Board boardFromRowRange(const Rows& rows) {
     Board board;
     int y = 0;
     for (std::string_view row : rows) {
@@ -27,4 +29,12 @@ inline Board boardFromRows(std::initializer_list<std::string_view> rows) {
         ++y;
     }
     return board;
+}
+
+inline Board boardFromRows(std::initializer_list<std::string_view> rows) {
+    return boardFromRowRange(rows);
+}
+
+inline Board boardFromRows(const std::vector<std::string_view>& rows) {
+    return boardFromRowRange(rows);
 }

@@ -40,6 +40,25 @@ std::string regenIntervalLabel(TimeMs interval) {
     return secondsText(interval);
 }
 
+std::vector<Difficulty> difficultyOptions() {
+    return {Difficulty::Easy, Difficulty::Normal, Difficulty::Hard};
+}
+
+std::size_t defaultDifficultyIndex() {
+    const auto options = difficultyOptions();
+    const auto it = std::find(options.begin(), options.end(), MatchConfig{}.ai.difficulty);
+    return static_cast<std::size_t>(it - options.begin());
+}
+
+std::string difficultyLabel(Difficulty difficulty) {
+    switch (difficulty) {
+        case Difficulty::Easy: return "簡單";
+        case Difficulty::Normal: return "普通";
+        case Difficulty::Hard: return "困難";
+    }
+    return {};
+}
+
 std::string skillDescription(SkillId skill, const SkillConfig& config) {
     switch (skill) {
         case SkillId::Accelerate:

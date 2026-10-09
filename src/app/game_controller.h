@@ -6,6 +6,7 @@
 #include <optional>
 #include <vector>
 
+#include "core/ai_engine.h"
 #include "core/board.h"
 #include "core/config.h"
 #include "core/energy_manager.h"
@@ -27,6 +28,9 @@ public:
     void tick(TimeMs now);                           // 推進倒數與能量
     PlayerView viewFor(PlayerId) const;
     void restart();  // G4：對局結束後才有效；保留設定與上一局的技能選擇，其餘全部重置
+    // M1：由 AI 操作這一方。技能選擇階段自動選技能並確定（A2a）；對局中每次 tick 決策，
+    // 動作一律經過 submit（A1），AI 只拿得到 viewFor(這一方)（A3、E5）
+    void attachAI(PlayerId, AIEngine);
 
 signals:
     void stateChanged();  // 收到後呼叫 viewFor(自己) 取資料
@@ -37,7 +41,9 @@ signals:
 private:
     void advanceTo(TimeMs now);
     void startMatch();
-    void initPlayers();  // 開局能量、所選技能、S4 冷卻（對局時間 0 起算）
+    void initPlayers();
+    void letAIChooseSkill(PlayerId);
+    void runAIs(TimeMs now);  // 開局能量、所選技能、S4 冷卻（對局時間 0 起算）
     ActionResult submitPlace(const PlaceAction&, TimeMs now);
     ActionResult submitSkill(const SkillAction&, TimeMs now);
     ActionResult reject(PlayerId, RejectReason, std::optional<Pos>);
@@ -58,4 +64,5 @@ private:
     std::array<bool, 2> skillRevealed{};  // 是否已經用過技能（S1：用過後對手才知道）
     TimeMs lastTime = 0;  // 最後一次推進到的對局時間
     std::vector<Pos> winningLine;
+    std::array<std::optional<AIEngine>, 2> ais{};
 };

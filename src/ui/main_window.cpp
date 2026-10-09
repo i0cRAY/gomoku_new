@@ -1,8 +1,11 @@
 #include "ui/main_window.h"
 
 #include <QHBoxLayout>
+#include <QRandomGenerator>
 #include <QShortcut>
 #include <QVBoxLayout>
+
+#include <algorithm>
 
 #include "app/local_session.h"
 #include "ui/hud_model.h"
@@ -74,6 +77,17 @@ QWidget* MainWindow::buildMenuPage() {
     intervalBox->setCurrentIndex(static_cast<int>(defaultRegenIntervalIndex()));
     intervalRow->addWidget(intervalBox);
     layout->addLayout(intervalRow);
+
+    // G1：AI 難度（僅 M1）
+    auto* difficultyRow = new QHBoxLayout;
+    difficultyRow->addWidget(new QLabel(QStringLiteral("AI 難度")));
+    difficultyBox = new QComboBox;
+    for (Difficulty d : difficultyOptions()) {
+        difficultyBox->addItem(toQString(difficultyLabel(d)), static_cast<int>(d));
+    }
+    difficultyBox->setCurrentIndex(static_cast<int>(defaultDifficultyIndex()));
+    difficultyRow->addWidget(difficultyBox);
+    layout->addLayout(difficultyRow);
     layout->addSpacing(12);
 
     auto addButton = [&](const QString& text, bool enabled) {
@@ -86,7 +100,8 @@ QWidget* MainWindow::buildMenuPage() {
         layout->addWidget(button, 0, Qt::AlignCenter);
         return button;
     };
-    addButton(QStringLiteral("人機對戰"), false);   // T18
+    auto* vsAI = addButton(QStringLiteral("人機對戰"), true);
+    connect(vsAI, &QPushButton::clicked, this, &MainWindow::startVsAI);
     addButton(QStringLiteral("開房（區網）"), false);  // T20
     addButton(QStringLiteral("加入（區網）"), false);  // T21
     auto* localDev = addButton(QStringLiteral("本機雙人（開發用）"), true);
@@ -128,25 +143,48 @@ QWidget* MainWindow::buildGamePage() {
     return page;
 }
 
-void MainWindow::startLocalDev() {
-    config = MatchConfig{};
-    config.regenInterval = intervalBox->currentData().toLongLong();
-    localPlayers = {PlayerId::Black, PlayerId::White};
-    primary = PlayerId::Black;
-    lastConfirmed.clear();
-    lastStatus.reset();
+MatchConfig MainWindow::configFromMenu() const {
+    MatchConfig result;
+    result.regenInterval = intervalBox->currentData().toLongLong();
+    result.ai.difficulty = static_cast<Difficulty>(difficultyBox->currentData().toInt());
+    return result;
+}
 
-    blackHud->setConfig(config);
-    whiteHud->setConfig(config);
+void MainWindow::startVsAI() {
+    config = configFromMenu();
+    blackHud->setTitle(QString());
+    whiteHud->hide();  // E5：只顯示自己的資訊
+    startSession({PlayerId::Black});
+    // 先讓技能選擇畫面就緒，AI 確定時才看得到「對手已準備」
+    auto* local = static_cast<LocalSession*>(session.get());
+    local->attachAI(PlayerId::White, QRandomGenerator::global()->generate());
+}
+
+void MainWindow::startLocalDev() {
+    config = configFromMenu();
     blackHud->setTitle(QStringLiteral("黑方（左鍵、Q）"));
     whiteHud->setTitle(QStringLiteral("白方（右鍵、P）"));
     whiteHud->show();  // M3：HUD 同時顯示雙方（E5 的例外）
+    startSession({PlayerId::Black, PlayerId::White});
+}
 
-    session = std::make_unique<LocalSession>(config, PlayerId::Black);
+void MainWindow::startSession(std::vector<PlayerId> players) {
+    localPlayers = std::move(players);
+    primary = localPlayers.front();
+    lastConfirmed.clear();
+    lastStatus.reset();
+    blackHud->setConfig(config);
+    whiteHud->setConfig(config);
+
+    session = std::make_unique<LocalSession>(config, primary);
     connect(session.get(), &GameSession::stateChanged, this, &MainWindow::refresh);
     connect(session.get(), &GameSession::actionRejected, this, &MainWindow::onRejected);
     connect(session.get(), &GameSession::opponentReady, this, [this] { skillPage->setOpponentReady(true); });
     refresh();
+}
+
+bool MainWindow::isLocal(PlayerId player) const {
+    return std::find(localPlayers.begin(), localPlayers.end(), player) != localPlayers.end();
 }
 
 void MainWindow::backToMenu() {
@@ -194,6 +232,9 @@ void MainWindow::refresh() {
 }
 
 void MainWindow::onRejected(PlayerId player, RejectReason reason, std::optional<Pos> pos) {
+    if (!isLocal(player)) {
+        return;  // 只提示本機玩家自己的請求（AI 被拒不顯示）
+    }
     if (pos && pages->currentWidget() == gamePage) {
         board->flashRejected(*pos);  // P6
     }

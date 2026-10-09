@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 #include "app/game_clock.h"
 #include "app/game_controller.h"
 #include "app/game_session.h"
@@ -18,6 +20,7 @@ public:
     PlayerView viewFor(PlayerId) const override;
     void requestRematch() override;
 
+    void attachAI(PlayerId, std::uint32_t seed);  // M1：AI 操作這一方
     const GameClock& clock() const { return gameClock; }
 
 private:
