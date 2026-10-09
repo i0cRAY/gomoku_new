@@ -86,6 +86,7 @@ if(BUILD_TESTING)
         tests/core/energy_manager_test.cpp
         tests/core/skill_system_test.cpp
         tests/core/ai_pattern_test.cpp
+        tests/core/ai_score_test.cpp
     )
     target_link_libraries(core_tests PRIVATE gomoku_core GTest::gtest_main)
     gtest_discover_tests(core_tests)

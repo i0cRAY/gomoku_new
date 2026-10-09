@@ -15,12 +15,25 @@ struct SkillConfig {
     TimeMs bombCooldown = 20000;  // spec SB
 };
 
+// spec A10 的評分表
+struct PatternScores {
+    int five = 100000;
+    int openFour = 10000;
+    int doubleThreeBonus = 8000;  // 同一格兩個以上方向形成活三或更強
+    int four = 1000;
+    int openThree = 1000;
+    int three = 100;
+    int openTwo = 100;
+    int two = 10;
+};
+
 struct AIConfig {
     Difficulty difficulty = Difficulty::Normal;
     TimeMs reactionEasy = 1200;  // spec A2
     TimeMs reactionNormal = 700;
     TimeMs reactionHard = 350;
     double defenseWeight = 0.8;  // spec A10，各難度相同
+    PatternScores scores;
 };
 
 struct MatchConfig {
