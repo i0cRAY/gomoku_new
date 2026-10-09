@@ -165,3 +165,13 @@ TEST_F(CountdownRestartTest, U7_SkillConfirmedSignalTellsWho) {
     ASSERT_EQ(confirmedPlayers.size(), 1u);
     EXPECT_EQ(confirmedPlayers[0], PlayerId::White);
 }
+
+TEST_F(CountdownRestartTest, G2_U2_CountdownViewShowsChosenSkillAndStartEnergy) {
+    GameController game{config};
+    confirmBoth(game, SkillId::Bomb, SkillId::Accelerate);
+    const PlayerView black = game.viewFor(PlayerId::Black);
+    EXPECT_EQ(black.self.skill, SkillId::Bomb);
+    EXPECT_EQ(black.self.energy, 1);
+    EXPECT_EQ(black.self.skillReadyAt, 20000);  // S4：從對局時間 0 起算的冷卻
+    EXPECT_EQ(game.viewFor(PlayerId::White).self.skill, SkillId::Accelerate);
+}

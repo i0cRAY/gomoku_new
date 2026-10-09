@@ -1,6 +1,5 @@
 #include "ui/hud_view.h"
 
-#include <QKeySequence>
 #include <QPainter>
 #include <QShortcut>
 #include <QVBoxLayout>
@@ -62,9 +61,11 @@ void EnergyBar::paintEvent(QPaintEvent*) {
     }
 }
 
-HudView::HudView(MatchConfig config, QWidget* parent)
+HudView::HudView(MatchConfig config, QKeySequence skillKey, QWidget* parent)
     : QWidget(parent),
       config(config),
+      skillKey(skillKey),
+      titleLabel(new QLabel),
       energyBar(new EnergyBar),
       placeLabel(new QLabel),
       skillButton(new QPushButton),
@@ -72,6 +73,11 @@ HudView::HudView(MatchConfig config, QWidget* parent)
       accelerateLabel(new QLabel),
       messageLabel(new QLabel) {
     auto* layout = new QVBoxLayout(this);
+    QFont titleFont = titleLabel->font();
+    titleFont.setBold(true);
+    titleLabel->setFont(titleFont);
+    titleLabel->hide();
+    layout->addWidget(titleLabel);
     layout->addWidget(new QLabel(QStringLiteral("能量")));
     layout->addWidget(energyBar);
     layout->addWidget(placeLabel);
@@ -91,16 +97,24 @@ HudView::HudView(MatchConfig config, QWidget* parent)
     messageLabel->setPalette(palette);
 
     connect(skillButton, &QPushButton::clicked, this, &HudView::skillTriggered);
-    auto* skillShortcut = new QShortcut(QKeySequence(Qt::Key_Q), this);
+    auto* skillShortcut = new QShortcut(skillKey, this);
     connect(skillShortcut, &QShortcut::activated, this, &HudView::skillTriggered);
-    auto* cancelShortcut = new QShortcut(QKeySequence(Qt::Key_Escape), this);
-    connect(cancelShortcut, &QShortcut::activated, this, &HudView::cancelRequested);
 
     messageTimer.setSingleShot(true);
     messageTimer.setInterval(kMessageDurationMs);
     connect(&messageTimer, &QTimer::timeout, messageLabel, &QLabel::clear);
 
     setView(view);
+}
+
+void HudView::setConfig(const MatchConfig& newConfig) {
+    config = newConfig;
+    setView(view);
+}
+
+void HudView::setTitle(const QString& title) {
+    titleLabel->setText(title);
+    titleLabel->setVisible(!title.isEmpty());
 }
 
 void HudView::setView(const PlayerView& newView) {
@@ -126,7 +140,7 @@ void HudView::showRejection(RejectReason reason) {
 }
 
 void HudView::refreshSkillText() {
-    skillButton->setText(QStringLiteral("%1（Q）").arg(toQString(skillName(view.self.skill))));
+    skillButton->setText(QStringLiteral("%1（%2）").arg(toQString(skillName(view.self.skill)), skillKey.toString()));
     if (targeting) {
         skillLabel->setText(QStringLiteral("選擇目標：點對手的棋子\n右鍵或 Esc 取消"));
         return;

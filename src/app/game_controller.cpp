@@ -36,6 +36,7 @@ void GameController::confirmSkill(PlayerId player) {
     if (confirmed[0] && confirmed[1]) {
         status = GameStatus::Countdown;  // G2
         lastTime = -config.countdown;
+        initPlayers();  // 倒數期間就顯示所選技能與開局能量
     }
     emit skillConfirmed(player);
     emit stateChanged();
@@ -113,6 +114,9 @@ void GameController::advanceTo(TimeMs now) {
 void GameController::startMatch() {
     status = GameStatus::Running;
     lastTime = 0;
+}
+
+void GameController::initPlayers() {
     skillRevealed = {};
     for (PlayerId p : {PlayerId::Black, PlayerId::White}) {
         PlayerState& s = state(p);

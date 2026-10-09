@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QKeySequence>
 #include <QLabel>
 #include <QPushButton>
 #include <QTimer>
@@ -31,22 +32,26 @@ private:
 class HudView : public QWidget {
     Q_OBJECT
 public:
-    explicit HudView(MatchConfig, QWidget* parent = nullptr);
+    // skillKey：使用技能的快捷鍵（U4 預設 Q；M3 白方用另一個鍵避免衝突）
+    explicit HudView(MatchConfig, QKeySequence skillKey = QKeySequence(Qt::Key_Q), QWidget* parent = nullptr);
 
+    void setConfig(const MatchConfig&);
+    void setTitle(const QString&);  // M3 同時顯示雙方時標示是哪一方
     void setView(const PlayerView&);
     void setTargeting(bool);           // U3：顯示「選擇目標」提示
     void showRejection(RejectReason);  // U5
 
 signals:
-    void skillTriggered();   // 技能按鈕或 Q（U4）
-    void cancelRequested();  // Esc（U3）
+    void skillTriggered();  // 技能按鈕或快捷鍵（U4）
 
 private:
     void refreshSkillText();
 
     MatchConfig config;
+    QKeySequence skillKey;
     PlayerView view;
     bool targeting = false;
+    QLabel* titleLabel;
     EnergyBar* energyBar;
     QLabel* placeLabel;
     QPushButton* skillButton;

@@ -37,6 +37,7 @@ signals:
 private:
     void advanceTo(TimeMs now);
     void startMatch();
+    void initPlayers();  // 開局能量、所選技能、S4 冷卻（對局時間 0 起算）
     ActionResult submitPlace(const PlaceAction&, TimeMs now);
     ActionResult submitSkill(const SkillAction&, TimeMs now);
     ActionResult reject(PlayerId, RejectReason, std::optional<Pos>);

@@ -47,8 +47,13 @@ add_library(gomoku_ui STATIC
     src/ui/board_view.cpp
     src/ui/hud_model.cpp
     src/ui/board_input.cpp
+    src/ui/menu_model.cpp
     src/ui/hud_view.h
     src/ui/hud_view.cpp
+    src/ui/skill_select_view.h
+    src/ui/skill_select_view.cpp
+    src/ui/main_window.h
+    src/ui/main_window.cpp
 )
 set_target_properties(gomoku_ui PROPERTIES AUTOMOC ON)
 target_link_libraries(gomoku_ui PUBLIC gomoku_app Qt6::Widgets)
@@ -97,6 +102,7 @@ if(BUILD_TESTING)
         tests/ui/board_geometry_test.cpp
         tests/ui/hud_model_test.cpp
         tests/ui/board_input_test.cpp
+        tests/ui/menu_model_test.cpp
     )
     target_link_libraries(ui_tests PRIVATE gomoku_ui GTest::gtest_main)
     gtest_discover_tests(ui_tests)
