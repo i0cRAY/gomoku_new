@@ -246,7 +246,7 @@ signals:
 3. 套用變更 → 下子的話呼叫 `RuleChecker::findFive` → 判斷勝負或和局
 4. 發 `stateChanged`（結束時再發 `gameOver`）
 
-**資訊隱藏（spec E5）**：雙方完整的 PlayerState 只存在 GameController 內部，不對外公開。外部（UI、AI、網路）一律透過 `viewFor` 取得 `PlayerView`：
+**資訊隱藏（spec E5）**：雙方完整的 PlayerState 只存在 GameController 內部，不對外公開。外部（UI、AI、網路）一律透過 `viewFor` 取得 `PlayerView`（定義在 `src/core/player_view.h`，因為 `src/net` 也要用，而 net 不能依賴 app）：
 
 ```cpp
 struct PlayerView {

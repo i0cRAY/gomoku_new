@@ -47,7 +47,7 @@
 
 ## Phase 2　控制層（`src/app`）
 
-- [ ] **T09 GameController：下子與勝負**　規格：G2、G3、P1–P5、W1–W4、E5
+- [x] **T09 GameController：下子與勝負**　規格：G2、G3、P1–P5、W1–W4、E5
 
     - 用 GoogleTest + `QCoreApplication`，手動指定時間
     - 測試：P1 每一種拒絕原因各一個；P3 被拒不扣能量；P4 第一子不受間隔限制；成五後 `gameOver` 帶著正確的連線；和局；結束後請求被拒

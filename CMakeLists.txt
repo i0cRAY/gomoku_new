@@ -29,7 +29,7 @@ target_link_libraries(gomoku_net PUBLIC gomoku_core Qt6::Core Qt6::Network)
 
 # 控制層：QtCore，不得依賴 QtWidgets
 add_library(gomoku_app STATIC
-    src/app/app.cpp
+    src/app/game_controller.cpp
 )
 set_target_properties(gomoku_app PROPERTIES AUTOMOC ON)
 target_link_libraries(gomoku_app PUBLIC gomoku_core gomoku_net Qt6::Core)
@@ -63,4 +63,11 @@ if(BUILD_TESTING)
     )
     target_link_libraries(core_tests PRIVATE gomoku_core GTest::gtest_main)
     gtest_discover_tests(core_tests)
+
+    add_executable(app_tests
+        tests/app/main.cpp
+        tests/app/game_controller_test.cpp
+    )
+    target_link_libraries(app_tests PRIVATE gomoku_app GTest::gtest)
+    gtest_discover_tests(app_tests)
 endif()
