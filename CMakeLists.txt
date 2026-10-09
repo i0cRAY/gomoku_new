@@ -37,12 +37,20 @@ add_library(gomoku_app STATIC
 set_target_properties(gomoku_app PROPERTIES AUTOMOC ON)
 target_link_libraries(gomoku_app PUBLIC gomoku_core gomoku_net Qt6::Core)
 
-# 主程式與介面層
+# 介面層：QtWidgets
+add_library(gomoku_ui STATIC
+    src/ui/board_geometry.cpp
+    src/ui/board_view.cpp
+)
+set_target_properties(gomoku_ui PROPERTIES AUTOMOC ON)
+target_link_libraries(gomoku_ui PUBLIC gomoku_app Qt6::Widgets)
+
+# 主程式
 add_executable(gomoku
     src/main.cpp
 )
 set_target_properties(gomoku PROPERTIES AUTOMOC ON)
-target_link_libraries(gomoku PRIVATE gomoku_app Qt6::Widgets)
+target_link_libraries(gomoku PRIVATE gomoku_ui)
 
 # 測試
 include(CTest)
@@ -76,4 +84,10 @@ if(BUILD_TESTING)
     )
     target_link_libraries(app_tests PRIVATE gomoku_app GTest::gtest)
     gtest_discover_tests(app_tests)
+
+    add_executable(ui_tests
+        tests/ui/board_geometry_test.cpp
+    )
+    target_link_libraries(ui_tests PRIVATE gomoku_ui GTest::gtest_main)
+    gtest_discover_tests(ui_tests)
 endif()
