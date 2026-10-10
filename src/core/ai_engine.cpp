@@ -137,8 +137,7 @@ AIEngine::AIEngine(PlayerId self, const AIConfig& ai, const SkillConfig& skill, 
       defenseWeight(ai.defenseWeight),
       rng(seed),
       scores(ai.scores),
-      skillEnergyCost(skill.energyCost),
-      destroyRadius(skill.destroyRadius) {}
+      skills(skill) {}
 
 SkillId AIEngine::chooseSkill() {
     constexpr SkillId kSkills[] = {SkillId::Bomb, SkillId::Dominate, SkillId::Destroy};  // A2a
@@ -200,7 +199,7 @@ std::optional<Action> AIEngine::decide(const PlayerView& view) {
     }
     // A8a：霸道用完後補充，並留 1 格能量可以馬上下子（技能不受下子間隔影響，S5）
     if (view.self.skill == SkillId::Dominate && view.self.dominateCharges == 0 &&
-        view.self.energy >= skillEnergyCost + kPlaceEnergy) {
+        view.self.energy >= skills.costOf(SkillId::Dominate) + kPlaceEnergy) {
         return SkillAction{self, SkillId::Dominate, std::nullopt};
     }
     // A9
@@ -264,7 +263,7 @@ bool AIEngine::skillReady(const PlayerView& view, SkillId skill) const {
     if (skill == SkillId::Destroy && view.self.destroyUsed) {
         return false;  // SX3
     }
-    return view.self.skill == skill && view.self.energy >= skillEnergyCost;  // S3：沒有冷卻，只看能量
+    return view.self.skill == skill && view.self.energy >= skills.costOf(skill);  // S3：沒有冷卻，只看能量
 }
 
 std::vector<Pos> AIEngine::opponentZones(const PlayerView& view) const {
@@ -379,20 +378,55 @@ std::vector<Pos> AIEngine::threatStones(const Board& board, const std::vector<Po
     return stones;
 }
 
-// 選炸掉後威脅分降最多的那顆威脅棋子
-std::optional<Pos> AIEngine::bestBombTarget(const Board& board, const std::vector<Pos>& points) const {
-    std::optional<Pos> best;
+// A5c：以目標為左上角的 2×2（SB3）至少涵蓋一顆威脅棋子；依序比較炸完後的威脅分、清掉的己方棋子數，
+// 都同分時隨機挑（A11）
+std::optional<Pos> AIEngine::bestBombTarget(const Board& board, const std::vector<Pos>& points) {
+    const std::vector<Pos> stones = threatStones(board, points);
+    const Cell ownStone = stoneOf(self);
+    const int size = skills.bombSize;
+    auto inArea = [&](Pos topLeft, Pos p) {
+        return p.x >= topLeft.x && p.x < topLeft.x + size && p.y >= topLeft.y && p.y < topLeft.y + size;
+    };
+
+    std::vector<Pos> best;
     Threat bestThreat{};
-    for (Pos c : threatStones(board, points)) {
-        Board after = board;
-        after.set(c, Cell::Empty);
-        const Threat threat = threatOf(after);
-        if (!best || threat < bestThreat) {
-            best = c;
-            bestThreat = threat;
+    int bestOwnLost = 0;
+    for (int y = 0; y < Board::kSize; ++y) {
+        for (int x = 0; x < Board::kSize; ++x) {
+            const Pos topLeft{x, y};
+            if (std::none_of(stones.begin(), stones.end(), [&](Pos s) { return inArea(topLeft, s); })) {
+                continue;
+            }
+            Board after = board;
+            int ownLost = 0;
+            for (int dy = 0; dy < size; ++dy) {
+                for (int dx = 0; dx < size; ++dx) {
+                    const Pos p{x + dx, y + dy};
+                    if (!board.inBounds(p) || !isStone(board.at(p))) {
+                        continue;
+                    }
+                    ownLost += board.at(p) == ownStone ? 1 : 0;
+                    after.set(p, Cell::Empty);
+                }
+            }
+            const Threat threat = threatOf(after);
+            const bool better = best.empty() || threat < bestThreat ||
+                                (!(bestThreat < threat) && ownLost < bestOwnLost);
+            const bool tie = !best.empty() && !(threat < bestThreat) && !(bestThreat < threat) && ownLost == bestOwnLost;
+            if (better) {
+                best = {topLeft};
+                bestThreat = threat;
+                bestOwnLost = ownLost;
+            } else if (tie) {
+                best.push_back(topLeft);
+            }
         }
     }
-    return best;
+    if (best.empty()) {
+        return std::nullopt;
+    }
+    std::uniform_int_distribution<std::size_t> pick(0, best.size() - 1);
+    return best[pick(rng)];
 }
 
 // A5b：範圍至少涵蓋一顆威脅棋子，且「範圍內對手棋子數 − 己方棋子數」最大的中心點；同分隨機挑（A11）
@@ -401,7 +435,7 @@ std::optional<Pos> AIEngine::bestDestroyTarget(const Board& board, const std::ve
     const Cell ownStone = stoneOf(self);
     const Cell enemyStone = stoneOf(opponent(self));
     auto inArea = [&](Pos center, Pos p) {
-        return std::abs(p.x - center.x) <= destroyRadius && std::abs(p.y - center.y) <= destroyRadius;
+        return std::abs(p.x - center.x) <= skills.destroyRadius && std::abs(p.y - center.y) <= skills.destroyRadius;
     };
 
     std::vector<Pos> best;
@@ -413,8 +447,8 @@ std::optional<Pos> AIEngine::bestDestroyTarget(const Board& board, const std::ve
                 continue;
             }
             int value = 0;
-            for (int dy = -destroyRadius; dy <= destroyRadius; ++dy) {
-                for (int dx = -destroyRadius; dx <= destroyRadius; ++dx) {
+            for (int dy = -skills.destroyRadius; dy <= skills.destroyRadius; ++dy) {
+                for (int dx = -skills.destroyRadius; dx <= skills.destroyRadius; ++dx) {
                     const Pos p{x + dx, y + dy};
                     if (!board.inBounds(p)) {
                         continue;

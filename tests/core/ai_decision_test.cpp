@@ -75,6 +75,29 @@ bool usedSkill(const std::optional<Action>& action, SkillId skill) {
     return s && s->skill == skill;
 }
 
+// 模擬炸彈（SB3：以 target 為左上角的 2×2 清空雙方棋子）後，白方的成五點數
+int whiteFivePointsAfterBomb(Board board, Pos target) {
+    for (int y = target.y; y <= target.y + 1; ++y) {
+        for (int x = target.x; x <= target.x + 1; ++x) {
+            if (board.inBounds({x, y}) && board.at({x, y}) != Cell::Destroyed) {
+                board.set({x, y}, Cell::Empty);
+            }
+        }
+    }
+    int count = 0;
+    for (int y = 0; y < Board::kSize; ++y) {
+        for (int x = 0; x < Board::kSize; ++x) {
+            for (int d = 0; d < AIEngine::kDirectionCount; ++d) {
+                if (AIEngine::patternAt(board, {x, y}, PlayerId::White, d) == Pattern::Five) {
+                    ++count;
+                    break;
+                }
+            }
+        }
+    }
+    return count;
+}
+
 // 第 7 列放一排棋子（避免碰到上下邊界）
 ViewSpec rowSpec(std::string_view row) {
     return ViewSpec{{"", "", "", "", "", "", "", row}};
@@ -111,18 +134,48 @@ TEST(AIDecisionTest, A5_BlocksSingleFivePoint) {
     EXPECT_EQ(placedAt(action), std::optional<Pos>(Pos{6, 7}));
 }
 
-TEST(AIDecisionTest, A5_DoubleThreatWithBombBombsThreatStone) {
+TEST(AIDecisionTest, A5_A5c_DoubleThreatWithBombClearsThreat) {
     AIEngine ai = engine();
     ViewSpec spec{{"", "", "", "", "", "", "", "..OOOO..."}};
     spec.skill = SkillId::Bomb;
+    spec.energy = 2;  // S2：炸彈 2 格
     const auto action = ai.decide(viewOf(spec));
     const SkillAction* bomb = skillOf(action);
     ASSERT_NE(bomb, nullptr);
     EXPECT_EQ(bomb->skill, SkillId::Bomb);
     ASSERT_TRUE(bomb->target.has_value());
-    EXPECT_EQ(bomb->target->y, 7);
-    EXPECT_GE(bomb->target->x, 2);
+    // 2×2 以目標為左上角，要涵蓋 (2..5, 7) 的威脅棋子
+    EXPECT_GE(bomb->target->x, 1);
     EXPECT_LE(bomb->target->x, 5);
+    EXPECT_GE(bomb->target->y, 6);
+    EXPECT_LE(bomb->target->y, 7);
+    EXPECT_EQ(whiteFivePointsAfterBomb(viewOf(spec).board, *bomb->target), 0);  // 炸完後擋得住
+}
+
+TEST(AIDecisionTest, A5c_PrefersNotClearingOwnStones) {
+    // 第 6 列有兩顆黑子；從第 6 列炸會清掉它們，所以選第 7 列為左上角
+    AIEngine ai = engine();
+    ViewSpec spec{{"", "", "", "", "", "", "..X.X....", "..OOOO..."}};
+    spec.skill = SkillId::Bomb;
+    const SkillAction* bomb = skillOf(ai.decide(viewOf(spec)));
+    ASSERT_NE(bomb, nullptr);
+    ASSERT_TRUE(bomb->target.has_value());
+    EXPECT_EQ(bomb->target->y, 7);
+    EXPECT_EQ(whiteFivePointsAfterBomb(viewOf(spec).board, *bomb->target), 0);
+}
+
+TEST(AIDecisionTest, A5c_TargetReproducibleWithSeed) {
+    for (std::uint32_t seed : {1u, 2u, 7u}) {
+        AIEngine a = engine(seed);
+        AIEngine b = engine(seed);
+        ViewSpec spec = rowSpec("..OOOO...");
+        spec.skill = SkillId::Bomb;
+        const SkillAction* x = skillOf(a.decide(viewOf(spec)));
+        const SkillAction* y = skillOf(b.decide(viewOf(spec)));
+        ASSERT_NE(x, nullptr);
+        ASSERT_NE(y, nullptr);
+        EXPECT_EQ(x->target, y->target);
+    }
 }
 
 TEST(AIDecisionTest, A5_DoubleThreatWithDominateStillBlocksOne) {
@@ -135,7 +188,7 @@ TEST(AIDecisionTest, A5_DoubleThreatWithBombButNoEnergyForItBlocksOne) {
     AIEngine ai = engine();
     ViewSpec spec{{"", "", "", "", "", "", "", "..OOOO..."}};
     spec.skill = SkillId::Bomb;
-    spec.energy = 2;  // 能下子，但不夠用炸彈
+    spec.energy = 1;  // 能下子，但不夠用炸彈（2 格）
     const auto action = ai.decide(viewOf(spec));
     EXPECT_TRUE(placedIn(action, cells({{1, 7}, {6, 7}})));
 }
@@ -440,7 +493,7 @@ TEST(AIDecisionTest, A8a_NotUsedWhileChargesRemain) {
 
 TEST(AIDecisionTest, A8a_EnergyThresholdFollowsSkillCost) {
     SkillConfig skill;
-    skill.energyCost = 5;
+    skill.dominateCost = 5;
     AIEngine ai(PlayerId::Black, AIConfig{}, skill, 1);
     ViewSpec spec = rowSpec(".....X...");
     spec.energy = 5;
@@ -546,11 +599,11 @@ TEST(AIDecisionTest, A1_NoPlacementWhileCooldownRemaining) {
 
 TEST(AIDecisionTest, S2_A5_BombEnergyCostComesFromConfig) {
     SkillConfig skill;
-    skill.energyCost = 4;
+    skill.bombCost = 4;
     AIEngine ai(PlayerId::Black, AIConfig{}, skill, 1);
     ViewSpec spec{{"", "", "", "", "", "", "", "..OOOO..."}};
     spec.skill = SkillId::Bomb;
-    spec.energy = 3;  // 預設耗能 3 夠用，但這裡要 4
+    spec.energy = 3;  // 預設耗能 2 夠用，但這裡要 4
     const auto action = ai.decide(viewOf(spec));
     EXPECT_EQ(skillOf(action), nullptr);
     EXPECT_TRUE(placedIn(action, cells({{1, 7}, {6, 7}})));

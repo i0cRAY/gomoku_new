@@ -18,11 +18,12 @@ public:
     void initPlayer(PlayerState&) const;  // 開局：清掉霸道次數、摧毀已用
     std::optional<RejectReason> check(const SkillAction&, const PlayerState&, const Board&) const;
     void apply(const SkillAction&, PlayerState&, Board&, ZoneMap&, TimeMs now) const;  // 呼叫前必須先通過 check
-    int energyCost() const { return config.energyCost; }
+    int costOf(SkillId skill) const { return config.costOf(skill); }  // S2
     // SZ2：成功下子後呼叫；霸道次數 > 0 時扣 1，並在該子上下左右（棋盤內）產生對手的禁區
     void onPlaced(PlayerId, PlayerState&, Pos, ZoneMap&, TimeMs now) const;
 
 private:
+    void bombArea(Pos topLeft, Board&) const;
     void destroyArea(Pos center, Board&, ZoneMap&) const;
 
     SkillConfig config;

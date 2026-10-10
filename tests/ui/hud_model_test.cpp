@@ -110,32 +110,43 @@ TEST(HudModelTest, U2_SX3_DestroyUsedText) {
     EXPECT_EQ(skillDetailText(v), "每局一次");
     v.self.destroyUsed = true;
     EXPECT_EQ(skillDetailText(v), "已使用");
-    EXPECT_FALSE(isSkillAvailable(v, 3));  // 能量夠也不能再用
+    EXPECT_FALSE(isSkillAvailable(v, SkillConfig{}));  // 能量夠也不能再用
 }
 
 TEST(HudModelTest, U2_S3_SkillAvailabilityDependsOnEnergy) {
-    PlayerView v = viewWith(2, 0.0);
+    PlayerView v = viewWith(1, 0.0);
     v.self.skill = SkillId::Bomb;
-    EXPECT_FALSE(isSkillAvailable(v, 3));
+    EXPECT_FALSE(isSkillAvailable(v, SkillConfig{}));
+    v.self.energy = 2;  // 炸彈 2 格就夠
+    EXPECT_TRUE(isSkillAvailable(v, SkillConfig{}));
+    v.self.skill = SkillId::Dominate;
+    EXPECT_FALSE(isSkillAvailable(v, SkillConfig{}));  // 霸道要 3 格
     v.self.energy = 3;
-    EXPECT_TRUE(isSkillAvailable(v, 3));
+    EXPECT_TRUE(isSkillAvailable(v, SkillConfig{}));
 }
 
 TEST(HudModelTest, U2_S3_SkillStatusText) {
-    PlayerView v = viewWith(2, 0.0);
+    const SkillConfig config;
+    PlayerView v = viewWith(1, 0.0);
     v.self.skill = SkillId::Bomb;
-    EXPECT_EQ(skillStatusText(v, 3), "能量不足（需要 3 格）");
+    EXPECT_EQ(skillStatusText(v, config), "能量不足（需要 2 格）");
+    v.self.energy = 2;
+    EXPECT_EQ(skillStatusText(v, config), "可使用（消耗 2 格）");
+    v.self.skill = SkillId::Dominate;
+    EXPECT_EQ(skillStatusText(v, config), "能量不足（需要 3 格）");
     v.self.energy = 4;
-    EXPECT_EQ(skillStatusText(v, 3), "可使用（消耗 3 格）");
+    EXPECT_EQ(skillStatusText(v, config), "可使用（消耗 3 格）");
     v.self.skill = SkillId::Destroy;
     v.self.destroyUsed = true;
-    EXPECT_EQ(skillStatusText(v, 3), "");  // detail 已顯示「已使用」
+    EXPECT_EQ(skillStatusText(v, config), "");  // detail 已顯示「已使用」
 }
 
 TEST(HudModelTest, U3_TargetingPromptDependsOnSkill) {
     const SkillConfig config;
     EXPECT_NE(targetingPrompt(SkillId::Bomb, config), targetingPrompt(SkillId::Destroy, config));
     EXPECT_NE(targetingPrompt(SkillId::Destroy, config).find("5×5"), std::string::npos);
+    EXPECT_NE(targetingPrompt(SkillId::Bomb, config).find("2×2"), std::string::npos);
+    EXPECT_NE(targetingPrompt(SkillId::Bomb, config).find("左上角"), std::string::npos);
 }
 
 TEST(HudModelTest, U2_SX3_SkillButtonDisabledAfterDestroyUsed) {

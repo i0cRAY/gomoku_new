@@ -9,6 +9,7 @@
 #include <algorithm>
 
 #include "app/local_session.h"
+#include "ui/board_overlay.h"
 #include "ui/hud_model.h"
 #include "ui/menu_model.h"
 
@@ -264,17 +265,15 @@ void MainWindow::refresh() {
     if (aiPlayer && config.showAiInfo) {
         hud(*aiPlayer)->setView(session->viewFor(*aiPlayer));  // M1a：只有 UI 讀 AI 的資訊，AIEngine 不受影響
     }
-    std::optional<int> previewRadius;
+    std::optional<SkillArea> previewArea;
     bool targeting = false;
     for (PlayerId p : localPlayers) {
         if (input(p).isTargeting()) {
             targeting = true;
-            if (session->viewFor(p).self.skill == SkillId::Destroy) {
-                previewRadius = config.skill.destroyRadius;  // U3：摧毀預覽範圍
-            }
+            previewArea = skillArea(session->viewFor(p).self.skill, config.skill);  // U3：預覽範圍
         }
     }
-    board->setTargeting(targeting, previewRadius);
+    board->setTargeting(targeting, previewArea);
 
     if (view.status == GameStatus::Countdown) {
         banner->setText(toQString(countdownText(view.countdownRemaining)));

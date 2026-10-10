@@ -23,7 +23,7 @@ const QColor kDestroyedFill(70, 60, 55);
 const QColor kDestroyedMark(120, 105, 95);
 const QColor kBlackZone(40, 90, 200);      // 黑方的禁區（限制白方）
 const QColor kWhiteZone(200, 60, 160);     // 白方的禁區（限制黑方）
-const QColor kDestroyPreview(200, 30, 30);
+const QColor kSkillPreview(200, 30, 30);
 
 constexpr double kStoneRadius = 0.45;     // 以格距為單位
 constexpr double kStarRadius = 0.1;
@@ -83,9 +83,9 @@ void BoardView::flashRejected(Pos pos) {
     update();
 }
 
-void BoardView::setTargeting(bool targeting, std::optional<int> radius) {
+void BoardView::setTargeting(bool targeting, std::optional<SkillArea> area) {
     setCursor(targeting ? Qt::CrossCursor : Qt::ArrowCursor);
-    previewRadius = targeting ? radius : std::nullopt;
+    previewArea = targeting ? area : std::nullopt;
     update();
 }
 
@@ -158,7 +158,7 @@ void BoardView::paintEvent(QPaintEvent*) {
     }
 
     paintClearFlash(painter, cell);
-    paintDestroyPreview(painter, cell);
+    paintSkillPreview(painter, cell);
 
     // P6：被拒絕的格子閃紅色，逐漸淡出
     painter.setPen(Qt::NoPen);
@@ -184,7 +184,7 @@ void BoardView::mouseMoveEvent(QMouseEvent* event) {
     const auto cell = g.pixelToCell(event->position().x(), event->position().y());
     if (cell != hover) {
         hover = cell;
-        if (previewRadius) {
+        if (previewArea) {
             update();
         }
     }
@@ -252,15 +252,15 @@ void BoardView::paintClearFlash(QPainter& painter, double cell) {
     }
 }
 
-// U3：摧毀選目標時，預覽滑鼠所在位置的範圍
-void BoardView::paintDestroyPreview(QPainter& painter, double cell) {
-    if (!previewRadius || !hover) {
+// U3：炸彈、摧毀選目標時，預覽滑鼠所在位置的範圍
+void BoardView::paintSkillPreview(QPainter& painter, double cell) {
+    if (!previewArea || !hover) {
         return;
     }
     const BoardGeometry g(width(), height());
-    QColor color = kDestroyPreview;
+    QColor color = kSkillPreview;
     color.setAlpha(kPreviewAlpha);
-    for (Pos p : destroyPreviewCells(*hover, *previewRadius)) {
+    for (Pos p : areaCells(*hover, *previewArea)) {
         const QPointF c = toQt(g.cellCenter(p));
         painter.fillRect(QRectF(c.x() - cell / 2, c.y() - cell / 2, cell, cell), color);
     }

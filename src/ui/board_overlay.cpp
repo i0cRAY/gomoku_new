@@ -11,10 +11,20 @@ constexpr TimeMs kMsPerSecond = 1000;
 
 }  // namespace
 
-std::vector<Pos> destroyPreviewCells(Pos center, int radius) {
+std::optional<SkillArea> skillArea(SkillId skill, const SkillConfig& config) {
+    switch (skill) {
+        case SkillId::Bomb: return SkillArea{0, config.bombSize - 1};
+        case SkillId::Destroy: return SkillArea{config.destroyRadius, config.destroyRadius};
+        case SkillId::Dominate: return std::nullopt;
+    }
+    return std::nullopt;
+}
+
+std::vector<Pos> areaCells(Pos target, SkillArea area) {
     std::vector<Pos> cells;
-    for (int y = std::max(0, center.y - radius); y <= std::min(Board::kSize - 1, center.y + radius); ++y) {
-        for (int x = std::max(0, center.x - radius); x <= std::min(Board::kSize - 1, center.x + radius); ++x) {
+    for (int y = std::max(0, target.y - area.before); y <= std::min(Board::kSize - 1, target.y + area.after); ++y) {
+        for (int x = std::max(0, target.x - area.before); x <= std::min(Board::kSize - 1, target.x + area.after);
+             ++x) {
             cells.push_back({x, y});
         }
     }

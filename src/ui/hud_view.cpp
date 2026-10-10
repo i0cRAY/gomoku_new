@@ -153,6 +153,6 @@ void HudView::refreshSkillText() {
     if (targeting) {
         skillLabel->setText(toQString(targetingPrompt(view.self.skill, config.skill)));
     } else {
-        skillLabel->setText(toQString(skillStatusText(view, config.skill.energyCost)));  // U2、S3
+        skillLabel->setText(toQString(skillStatusText(view, config.skill)));  // U2、S3
     }
 }

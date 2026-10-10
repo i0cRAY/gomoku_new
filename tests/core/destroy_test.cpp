@@ -107,14 +107,19 @@ TEST_F(DestroyTest, SX5_MissingTargetIsInvalid) {
     EXPECT_EQ(skills.check(destroyAt(std::nullopt), state, board), RejectReason::InvalidTarget);  // 排在能量之前
 }
 
-TEST(BombOnDestroyedTest, SB2_DestroyedCellIsInvalidTarget) {
+TEST(BombOnDestroyedTest, SB1_SB3_DestroyedCellIsValidTargetAndStaysDestroyed) {
     SkillSystem skills{SkillConfig{}};
     PlayerState bomber;
     bomber.energy = 3;
     bomber.skill = SkillId::Bomb;
     skills.initPlayer(bomber);
     Board board;
+    ZoneMap zones;
     board.set({3, 3}, Cell::Destroyed);
-    EXPECT_EQ(skills.check(SkillAction{PlayerId::Black, SkillId::Bomb, Pos{3, 3}}, bomber, board),
-              RejectReason::InvalidTarget);
+    board.set({4, 3}, Cell::White);
+    const SkillAction bomb{PlayerId::Black, SkillId::Bomb, Pos{3, 3}};
+    ASSERT_EQ(skills.check(bomb, bomber, board), std::nullopt);
+    skills.apply(bomb, bomber, board, zones, 0);
+    EXPECT_EQ(board.at({3, 3}), Cell::Destroyed);
+    EXPECT_TRUE(board.isEmpty({4, 3}));
 }

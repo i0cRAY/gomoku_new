@@ -18,7 +18,7 @@ class AIEngine {
 public:
     static constexpr int kDirectionCount = 4;  // 橫、直、右下斜、右上斜
 
-    // 反應時間（A2）、w 與評分表取自 AIConfig；技能耗能取自 SkillConfig
+    // 反應時間（A2）、w 與評分表取自 AIConfig；技能耗能與範圍取自 SkillConfig
     AIEngine(PlayerId self, const AIConfig&, const SkillConfig&, std::uint32_t seed);
 
     SkillId chooseSkill();  // A2a：技能選擇階段隨機選一項
@@ -54,7 +54,7 @@ private:
     std::optional<Action> respondToFivePoints(const PlayerView&, const std::vector<Pos>& points,
                                               const std::vector<Pos>& zones);
     std::vector<Pos> threatStones(const Board&, const std::vector<Pos>& points) const;  // spec A5 名詞
-    std::optional<Pos> bestBombTarget(const Board&, const std::vector<Pos>& points) const;
+    std::optional<Pos> bestBombTarget(const Board&, const std::vector<Pos>& points);  // A5c
     std::optional<Pos> bestDestroyTarget(const Board&, const std::vector<Pos>& points);  // A5b
     std::optional<Pos> openThreeBlock(const Board&, const std::vector<Pos>& zones) const;  // A7
     std::optional<Pos> highestScore(const Board&, const std::vector<Pos>& candidates) const;
@@ -64,7 +64,6 @@ private:
     double defenseWeight;
     std::mt19937 rng;
     PatternScores scores;
-    int skillEnergyCost;  // spec S2：技能能量夠不夠用
-    int destroyRadius;    // spec SX2：5×5 = 中心 ±2
+    SkillConfig skills;  // spec S2 各技能的消耗、SB3 炸彈範圍、SX2 摧毀範圍
     std::optional<TimeMs> lastDecision;
 };

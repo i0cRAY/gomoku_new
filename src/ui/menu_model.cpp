@@ -64,10 +64,12 @@ std::vector<SkillId> skillOptions() {
 }
 
 std::string skillDescription(SkillId skill, const SkillConfig& config) {
-    const std::string cost = "消耗 " + std::to_string(config.energyCost) + " 格能量";  // U7、S2
+    const std::string cost = "消耗 " + std::to_string(config.costOf(skill)) + " 格能量";  // U7、S2
     switch (skill) {
-        case SkillId::Bomb:
-            return "移除一顆對手的棋子\n" + cost;
+        case SkillId::Bomb: {
+            const std::string side = std::to_string(config.bombSize);
+            return "清掉以目標為左上角 " + side + "×" + side + " 範圍內\n雙方的棋子\n" + cost;
+        }
         case SkillId::Dominate:
             return "接下來 " + std::to_string(config.dominateStones) + " 顆棋子的上下左右\n對手 " +
                    secondsText(config.zoneDuration) + "內不能下\n" + cost;

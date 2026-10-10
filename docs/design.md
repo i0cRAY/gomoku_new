@@ -134,10 +134,14 @@ struct ZoneCell {
 
 ```cpp
 struct SkillConfig {
-    int energyCost = 3;                  // spec S2：三項技能相同，沒有冷卻
+    int bombCost = 2;                    // spec S2：各技能的能量消耗，沒有冷卻
+    int dominateCost = 3;
+    int destroyCost = 3;
+    int bombSize = 2;                    // spec SB3：以目標為左上角的 2×2
     int dominateStones = 3;              // spec SZ1
     TimeMs zoneDuration = 3000;          // spec SZ2
     int destroyRadius = 2;               // spec SX2：5×5 = 中心 ±2
+    int costOf(SkillId) const;           // spec S2：規則檢查、HUD、AI 共用
 };
 
 struct AIConfig {
@@ -217,7 +221,7 @@ public:
     explicit EnergyManager(const MatchConfig&);   // 使用 regenInterval、maxEnergy
     // 把 state 從 from 推進到 to，套用回能規則
     void advance(PlayerState&, TimeMs from, TimeMs to) const;
-    bool canConsume(const PlayerState&, int amount = 1) const;   // 下子 1 格、技能 3 格（spec S2）
+    bool canConsume(const PlayerState&, int amount = 1) const;   // 下子 1 格、技能依 costOf（spec S2）
     void consume(PlayerState&, int amount = 1) const;
     // 下一格能量的累積比例 0.0–1.0（= regenProgress / T）；能量已滿回傳 0（spec E6）
     double nextEnergyRatio(const PlayerState&) const;
@@ -233,7 +237,7 @@ class SkillSystem {
 public:
     explicit SkillSystem(SkillConfig);   // 定義於 config.h
     void initPlayer(PlayerState&) const;   // 開局：清掉霸道次數、摧毀已用
-    // 能量檢查（S3）也在這裡：energy < energyCost 時回傳 NoEnergy，位置依各技能的檢查順序
+    // 能量檢查（S3）也在這裡：energy < costOf(skill) 時回傳 NoEnergy，位置依各技能的檢查順序
     std::optional<RejectReason> check(const SkillAction&, const PlayerState&, const Board&) const;
     // 呼叫前必須先通過 check。扣能量（S2）由呼叫端透過 EnergyManager 處理，才能套用 E4 的回能規則
     void apply(const SkillAction&, PlayerState&, Board&, ZoneMap&, TimeMs now) const;
@@ -244,7 +248,7 @@ public:
 
 `check` 第一步先比對 `action.skill == state.skill`，不同就回傳 `SkillNotOwned`（spec S1a）。各技能的檢查順序見 spec SB4、SZ5、SX4。
 
-`EnergyManager` 的 `canConsume` / `consume` 加上「格數」參數（下子 1 格、技能 `SkillConfig::energyCost` 格），兩者共用同一套扣能量與 E4 處理。
+`EnergyManager` 的 `canConsume` / `consume` 加上「格數」參數（下子 1 格、技能 `SkillConfig::costOf(skill)` 格），兩者共用同一套扣能量與 E4 處理。
 
 ### 4.5a ZoneMap（`src/core/zone_map.h`）— spec SZ2–SZ4、SX2
 
@@ -291,7 +295,7 @@ signals:
 2. 依 spec 的順序檢查，失敗就發 `actionRejected` 並回傳
 3. 套用變更：
     - 下子：`Board::set` → `SkillSystem::onPlaced`（霸道禁區）→ `RuleChecker::findLines` → 有連線就移除棋子、加分（W1、W2、W6）、發 `linesCleared` → 達分模式檢查 W8 → 棋盤沒有空格就結束（W4）
-    - 技能：`EnergyManager::consume(state, energyCost)`（S2）→ `SkillSystem::apply`（摧毀時一併清掉範圍內的禁區）
+    - 技能：`EnergyManager::consume(state, costOf(skill))`（S2）→ `SkillSystem::apply`（摧毀時一併清掉範圍內的禁區）
 4. 發 `stateChanged`（結束時再發 `gameOver`）
 
 **資訊隱藏（spec E5）**：雙方完整的 PlayerState 只存在 GameController 內部，不對外公開。外部（UI、AI、網路）一律透過 `viewFor` 取得 `PlayerView`（定義在 `src/core/player_view.h`，因為 `src/net` 也要用，而 net 不能依賴 app）：
@@ -398,8 +402,8 @@ Ready -->|是| Win{"A4 自己<br/>一步成五？"}
 Win -->|是| Place
 Win -->|否| Threat{"A5 對手有<br/>成五點？"}
 Threat -->|"1 個且能下子"| Place
-Threat -->|"擋不完或不能下子"| Bomb{"選了炸彈且<br/>能量 ≥ 3？"}
-Bomb -->|是| UseBomb[炸對手威脅棋型的一子]
+Threat -->|"擋不完或不能下子"| Bomb{"選了炸彈且<br/>能量 ≥ 2？"}
+Bomb -->|是| UseBomb["A5c 炸彈<br/>（2×2 涵蓋威脅棋子）"]
 Bomb -->|否| Destroy{"選了摧毀、能量 ≥ 3<br/>且還沒用過？"}
 Destroy -->|是| UseDestroy["A5b 摧毀<br/>（對手子 − 己方子 最多）"]
 Destroy -->|"否，擋不完"| BlockOne["擋威脅分降最多的<br/>那個成五點"]
@@ -472,7 +476,7 @@ signals:
 
 ### 4.10 介面層（`src/ui/`）
 
-- `BoardView`（QWidget，覆寫 `paintEvent`）：畫格線、棋子、已摧毀的格子、禁區（U9）、被拒絕時的紅色閃爍、炸彈／摧毀選目標模式（摧毀預覽 5×5）、消除連線的閃爍與「+N」（U11）。
+- `BoardView`（QWidget，覆寫 `paintEvent`）：畫格線、棋子、已摧毀的格子、禁區（U9）、被拒絕時的紅色閃爍、炸彈／摧毀選目標模式（預覽炸彈 2×2、摧毀 5×5）、消除連線的閃爍與「+N」（U11）。
 - `HudView`（QWidget）：自己的能量條（10 格，最後一格依比例部分填滿）、自己所選技能的按鈕與能量是否足夠（≥ 3）、霸道次數或摧毀已用（用過後按鈕變灰）。能量條用 `paintEvent` 自己畫，不用 `QProgressBar`，才能畫出 10 格分段加部分填滿的樣子。可設為唯讀模式，給 M1a 的 AI HUD 使用（U10）。
 - `ScoreBoard`（QWidget）：雙方分數與剩餘時間或目標分數（U8）。
 - `MainWindow`：主選單（人機 / 開房 / 加入）、設定（回能間隔、比賽模式、顯示 AI 資訊）、技能選擇畫面（spec U7，含回主選單）、對局中的「再來一局」／「回主選單」按鈕與確認視窗（U12）、重開邀請對話框（N9）、結束畫面。
@@ -552,7 +556,7 @@ gomoku-rt/
 |AI 用單純評分還是 minimax + α-β 剪枝？|規則優先 + 評分|即時制沒有太多時間慢慢搜尋|
 |AI 要不要分難度？|不分，固定反應時間 350 ms|原本難度只影響反應時間，統一成最強的一種，少一個設定也少一組測試|
 |連五後結束，還是消除並計分？|消除並計分|即時制下一條連五就結束太快；消除後棋盤會空出來，對局可以持續，搭配限時或達分決定勝負|
-|技能用冷卻還是耗能量？|耗 3 格能量，沒有冷卻|技能和下子搶同一份資源，要在「多下幾子」和「放技能」之間取捨；也少了一套冷卻計時|
+|技能用冷卻還是耗能量？|耗能量（炸彈 2 格，霸道、摧毀 3 格），沒有冷卻|技能和下子搶同一份資源，要在「多下幾子」和「放技能」之間取捨；也少了一套冷卻計時|
 |禁區要不要公開？|公開|禁區直接影響對手能不能下，看不到只會讓對手一直被拒絕；霸道剩餘次數則不公開，保留心理戰|
 |回能用固定 tick 加總還是懶惰計算？|懶惰計算（每次 `advance(from, to)`）|結果與 tick 頻率無關，測試可以精確重現|
 |加入方要不要先預測畫面？|不預測，等主機快照|區網延遲很低，預測帶來的同步問題比延遲更麻煩|

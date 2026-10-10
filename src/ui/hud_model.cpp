@@ -31,19 +31,19 @@ bool isPlaceReady(const PlayerView& view, TimeMs placeCooldown) {
     return !view.self.lastPlaceTime || view.now - *view.self.lastPlaceTime >= placeCooldown;
 }
 
-bool isSkillAvailable(const PlayerView& view, int energyCost) {
+bool isSkillAvailable(const PlayerView& view, const SkillConfig& config) {
     if (view.self.skill == SkillId::Destroy && view.self.destroyUsed) {
         return false;
     }
-    return view.self.energy >= energyCost;
+    return view.self.energy >= config.costOf(view.self.skill);
 }
 
-std::string skillStatusText(const PlayerView& view, int energyCost) {
+std::string skillStatusText(const PlayerView& view, const SkillConfig& config) {
     if (view.self.skill == SkillId::Destroy && view.self.destroyUsed) {
         return {};  // skillDetailText 已顯示「已使用」
     }
-    const std::string cost = std::to_string(energyCost) + " 格）";
-    return isSkillAvailable(view, energyCost) ? "可使用（消耗 " + cost : "能量不足（需要 " + cost;
+    const std::string cost = std::to_string(config.costOf(view.self.skill)) + " 格）";
+    return isSkillAvailable(view, config) ? "可使用（消耗 " + cost : "能量不足（需要 " + cost;
 }
 
 std::string skillDetailText(const PlayerView& view) {
@@ -67,7 +67,8 @@ std::string targetingPrompt(SkillId skill, const SkillConfig& config) {
         const std::string side = std::to_string(config.destroyRadius * 2 + 1);
         return "選擇目標：點 " + side + "×" + side + " 範圍的中心\n右鍵或 Esc 取消";
     }
-    return "選擇目標：點對手的棋子\n右鍵或 Esc 取消";
+    const std::string side = std::to_string(config.bombSize);
+    return "選擇目標：點 " + side + "×" + side + " 範圍的左上角\n右鍵或 Esc 取消";
 }
 
 std::string scoreText(const PlayerView& view) {

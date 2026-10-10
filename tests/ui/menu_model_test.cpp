@@ -31,16 +31,22 @@ TEST(MenuModelTest, G1_IntervalLabelInSeconds) {
 
 // ---- U7：技能說明包含效果與能量消耗 ----
 
-TEST(MenuModelTest, U7_BombDescriptionShowsCost) {
+TEST(MenuModelTest, U7_SB3_BombDescriptionShowsAreaAndCost) {
     const std::string text = skillDescription(SkillId::Bomb, SkillConfig{});
-    EXPECT_NE(text.find("消耗 3 格能量"), std::string::npos);
+    EXPECT_NE(text.find("2×2"), std::string::npos);
+    EXPECT_NE(text.find("雙方"), std::string::npos);
+    EXPECT_NE(text.find("消耗 2 格能量"), std::string::npos);
     EXPECT_EQ(text.find("冷卻"), std::string::npos);
 }
 
 TEST(MenuModelTest, U7_DescriptionFollowsConfig) {
     SkillConfig config;
-    config.energyCost = 4;
+    config.bombCost = 4;
+    config.dominateCost = 5;
+    config.destroyCost = 6;
     EXPECT_NE(skillDescription(SkillId::Bomb, config).find("消耗 4 格能量"), std::string::npos);
+    EXPECT_NE(skillDescription(SkillId::Dominate, config).find("消耗 5 格能量"), std::string::npos);
+    EXPECT_NE(skillDescription(SkillId::Destroy, config).find("消耗 6 格能量"), std::string::npos);
 }
 
 // ---- G2：倒數文字 ----

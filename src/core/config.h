@@ -7,10 +7,23 @@
 // 所有數值集中在這裡（design §3.1）
 
 struct SkillConfig {
-    int energyCost = 3;           // spec S2：三項技能相同，沒有冷卻
+    int bombCost = 2;             // spec S2：各技能的能量消耗，沒有冷卻
+    int dominateCost = 3;
+    int destroyCost = 3;
+    int bombSize = 2;             // spec SB3：以目標為左上角的 2×2
     int dominateStones = 3;       // spec SZ1
     TimeMs zoneDuration = 3000;   // spec SZ2
     int destroyRadius = 2;        // spec SX2：5×5 = 中心 ±2
+
+    // spec S2：規則檢查、HUD、AI 共用
+    int costOf(SkillId skill) const {
+        switch (skill) {
+            case SkillId::Bomb: return bombCost;
+            case SkillId::Dominate: return dominateCost;
+            case SkillId::Destroy: return destroyCost;
+        }
+        return 0;
+    }
 };
 
 // spec A10 的評分表

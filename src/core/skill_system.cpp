@@ -8,16 +8,8 @@ void SkillSystem::initPlayer(PlayerState& state) const {
     state.destroyUsed = false;
 }
 
-namespace {
-
-Cell stoneOf(PlayerId player) {
-    return player == PlayerId::Black ? Cell::Black : Cell::White;
-}
-
-}  // namespace
-
 // 霸道：SKILL_NOT_OWNED → NO_ENERGY（SZ5，忽略目標座標）
-// 炸彈：SKILL_NOT_OWNED → OUT_OF_BOARD（沒有目標時為 INVALID_TARGET）→ NO_ENERGY → INVALID_TARGET（SB4、SB5）
+// 炸彈：SKILL_NOT_OWNED → OUT_OF_BOARD（沒有目標時為 INVALID_TARGET）→ NO_ENERGY（SB4、SB5；任何格子都能當目標，SB1）
 // 摧毀：SKILL_NOT_OWNED → OUT_OF_BOARD（沒有目標時為 INVALID_TARGET）→ SKILL_USED_UP → NO_ENERGY（SX4、SX5）
 std::optional<RejectReason> SkillSystem::check(const SkillAction& action, const PlayerState& state,
                                                const Board& board) const {
@@ -35,11 +27,8 @@ std::optional<RejectReason> SkillSystem::check(const SkillAction& action, const 
     if (action.skill == SkillId::Destroy && state.destroyUsed) {
         return RejectReason::SkillUsedUp;  // SX3
     }
-    if (state.energy < config.energyCost) {
+    if (state.energy < config.costOf(action.skill)) {
         return RejectReason::NoEnergy;  // S3
-    }
-    if (action.skill == SkillId::Bomb && board.at(*action.target) != stoneOf(opponent(action.player))) {
-        return RejectReason::InvalidTarget;  // SB2：空格或自己的棋子
     }
     return std::nullopt;
 }
@@ -48,7 +37,7 @@ void SkillSystem::apply(const SkillAction& action, PlayerState& state, Board& bo
                         TimeMs /*now*/) const {
     switch (action.skill) {
         case SkillId::Bomb:
-            board.set(*action.target, Cell::Empty);  // SB3
+            bombArea(*action.target, board);
             break;
         case SkillId::Dominate:
             state.dominateCharges = config.dominateStones;  // SZ1：重設，不疊加
@@ -57,6 +46,18 @@ void SkillSystem::apply(const SkillAction& action, PlayerState& state, Board& bo
             destroyArea(*action.target, board, zones);
             state.destroyUsed = true;  // SX3
             break;
+    }
+}
+
+// SB3：以 topLeft 為左上角的 bombSize × bombSize（截掉棋盤外），雙方棋子變回空格；已摧毀的格子與禁區不變
+void SkillSystem::bombArea(Pos topLeft, Board& board) const {
+    for (int y = topLeft.y; y < topLeft.y + config.bombSize; ++y) {
+        for (int x = topLeft.x; x < topLeft.x + config.bombSize; ++x) {
+            const Pos p{x, y};
+            if (board.inBounds(p) && board.at(p) != Cell::Destroyed) {
+                board.set(p, Cell::Empty);
+            }
+        }
     }
 }
 

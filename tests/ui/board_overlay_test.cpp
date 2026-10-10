@@ -1,11 +1,16 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <tuple>
 
 #include "ui/board_overlay.h"
 
-TEST(BoardOverlayTest, U3_DestroyPreviewIsNineByNineAtCenter) {
-    const auto cells = destroyPreviewCells({7, 7}, 4);
+TEST(BoardOverlayTest, U3_DestroyPreviewCenteredOnTarget) {
+    SkillConfig config;
+    config.destroyRadius = 4;
+    const auto area = skillArea(SkillId::Destroy, config);
+    ASSERT_TRUE(area.has_value());
+    const auto cells = areaCells({7, 7}, *area);
     EXPECT_EQ(cells.size(), 81u);
     EXPECT_NE(std::find(cells.begin(), cells.end(), Pos{3, 3}), cells.end());
     EXPECT_NE(std::find(cells.begin(), cells.end(), Pos{11, 11}), cells.end());
@@ -13,8 +18,24 @@ TEST(BoardOverlayTest, U3_DestroyPreviewIsNineByNineAtCenter) {
 }
 
 TEST(BoardOverlayTest, U3_DestroyPreviewClippedAtCorner) {
-    EXPECT_EQ(destroyPreviewCells({0, 0}, 4).size(), 25u);
-    EXPECT_EQ(destroyPreviewCells({14, 7}, 4).size(), 45u);  // 5 × 9
+    SkillConfig config;
+    config.destroyRadius = 4;
+    const SkillArea area = *skillArea(SkillId::Destroy, config);
+    EXPECT_EQ(areaCells({0, 0}, area).size(), 25u);
+    EXPECT_EQ(areaCells({14, 7}, area).size(), 45u);  // 5 × 9
+}
+
+TEST(BoardOverlayTest, U3_BombPreviewIsTwoByTwoFromTopLeft) {
+    const auto area = skillArea(SkillId::Bomb, SkillConfig{});
+    ASSERT_TRUE(area.has_value());
+    auto cells = areaCells({7, 7}, *area);
+    std::sort(cells.begin(), cells.end(), [](Pos a, Pos b) { return std::tie(a.y, a.x) < std::tie(b.y, b.x); });
+    EXPECT_EQ(cells, (std::vector<Pos>{{7, 7}, {8, 7}, {7, 8}, {8, 8}}));
+    EXPECT_EQ(areaCells({14, 14}, *area), (std::vector<Pos>{{14, 14}}));  // 超出棋盤的部分截掉
+}
+
+TEST(BoardOverlayTest, U3_DominateHasNoPreview) {
+    EXPECT_EQ(skillArea(SkillId::Dominate, SkillConfig{}), std::nullopt);
 }
 
 TEST(BoardOverlayTest, U9_ZoneOpacityFadesWithRemainingTime) {

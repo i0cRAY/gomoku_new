@@ -246,7 +246,7 @@ void GameController::clearLines(PlayerId player, Pos last) {
     emit linesCleared(lastClearedLines);
 }
 
-// GAME_NOT_RUNNING 先檢查，其餘依 SB4 / SZ5 / SX4 交給 SkillSystem；通過後扣 3 格能量（S2）
+// GAME_NOT_RUNNING 先檢查，其餘依 SB4 / SZ5 / SX4 交給 SkillSystem；通過後扣該技能的能量（S2）
 ActionResult GameController::submitSkill(const SkillAction& action, TimeMs now) {
     if (status != GameStatus::Running) {
         return reject(action.player, RejectReason::GameNotRunning, action.target);  // G3
@@ -255,7 +255,7 @@ ActionResult GameController::submitSkill(const SkillAction& action, TimeMs now) 
     if (const auto reason = skills.check(action, s, board)) {
         return reject(action.player, *reason, action.target);
     }
-    energy.consume(s, skills.energyCost());  // S2
+    energy.consume(s, skills.costOf(action.skill));  // S2
     skills.apply(action, s, board, zones, now);  // W3：炸彈、摧毀不觸發計分
     skillRevealed[indexOf(action.player)] = true;  // S1：對手從此看得到這項技能
     emit stateChanged();

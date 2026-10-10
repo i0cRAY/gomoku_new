@@ -34,7 +34,10 @@ TEST(ConfigTest, Sec4To8_DefaultsMatchSpecTables) {
     EXPECT_EQ(config.startEnergy, 1);
     EXPECT_EQ(config.placeCooldown, 500);
     EXPECT_EQ(config.countdown, 3000);
-    EXPECT_EQ(config.skill.energyCost, 3);
+    EXPECT_EQ(config.skill.bombCost, 2);
+    EXPECT_EQ(config.skill.dominateCost, 3);
+    EXPECT_EQ(config.skill.destroyCost, 3);
+    EXPECT_EQ(config.skill.bombSize, 2);
     EXPECT_EQ(config.ai.reactionTime, 350);
     EXPECT_DOUBLE_EQ(config.ai.defenseWeight, 0.8);
 }
