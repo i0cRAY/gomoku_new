@@ -16,6 +16,7 @@ struct PlayerView {
     GameStatus status = GameStatus::SkillSelect;
     TimeMs now = 0;
     PlayerState self;                               // 只有自己的狀態
+    TimeMs placeCooldownRemaining = 0;              // 自己的下子間隔剩餘毫秒，0 表示已過（P1-6、P4）
     double nextEnergyRatio = 0.0;                   // spec E6，下一格的累積比例 0.0–1.0
     std::optional<SkillId> opponentSkillRevealed;   // 對手第一次用技能後才有值，只有名稱（spec S1）
     TimeMs countdownRemaining = 0;                  // Countdown 狀態時的剩餘毫秒（spec G2）

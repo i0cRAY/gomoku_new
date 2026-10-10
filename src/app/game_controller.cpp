@@ -101,6 +101,9 @@ PlayerView GameController::viewFor(PlayerId player) const {
     if (skillRevealed[indexOf(opponent(player))]) {
         view.opponentSkillRevealed = state(opponent(player)).skill;
     }
+    if (view.self.lastPlaceTime) {
+        view.placeCooldownRemaining = std::max<TimeMs>(0, config.placeCooldown - (lastTime - *view.self.lastPlaceTime));
+    }
     view.nextEnergyRatio = energy.nextEnergyRatio(view.self);
     view.countdownRemaining = status == GameStatus::Countdown ? std::max<TimeMs>(0, -lastTime) : 0;
     view.scores = scores();

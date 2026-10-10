@@ -11,8 +11,11 @@ namespace {
 
 constexpr double kWeight = 0.8;
 
-AIEngine blackEngine(std::uint32_t seed = 1) {
-    return AIEngine(PlayerId::Black, 700, kWeight, seed);
+AIEngine blackEngine(std::uint32_t seed = 1, PatternScores scores = {}) {
+    AIConfig config;
+    config.defenseWeight = kWeight;
+    config.scores = scores;
+    return AIEngine(PlayerId::Black, config, SkillConfig{}, seed);
 }
 
 // 第 7 列放一排棋子（避免碰到邊界），回傳 (x, 7) 的分數
@@ -78,7 +81,7 @@ TEST(ScoreTest, A10_DefenseBonusAlsoWeighted) {
 TEST(ScoreTest, A10_ScoresComeFromConfig) {
     PatternScores scores;
     scores.openFour = 5;
-    const AIEngine engine(PlayerId::Black, 700, kWeight, 1, scores);
+    const AIEngine engine = blackEngine(1, scores);
     const Board board = boardFromRows({"", "", "", "", "", "", "", "..XXX...."});
     EXPECT_DOUBLE_EQ(engine.score(board, {5, 7}), 5);
 }

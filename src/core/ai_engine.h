@@ -18,15 +18,12 @@ class AIEngine {
 public:
     static constexpr int kDirectionCount = 4;  // 橫、直、右下斜、右上斜
 
-    AIEngine(PlayerId self, TimeMs reactionTime, double defenseWeight, std::uint32_t seed,
-             PatternScores scores = {}, TimeMs placeCooldown = MatchConfig{}.placeCooldown,
-             int skillEnergyCost = SkillConfig{}.energyCost);
-    // 依設定建立：反應時間（A2）、w、評分表與下子間隔都取自設定
-    static AIEngine fromConfig(PlayerId self, const MatchConfig&, std::uint32_t seed);
+    // 反應時間（A2）、w 與評分表取自 AIConfig；技能耗能取自 SkillConfig
+    AIEngine(PlayerId self, const AIConfig&, const SkillConfig&, std::uint32_t seed);
 
     SkillId chooseSkill();  // A2a：技能選擇階段隨機選一項
     // A1–A9：反應時間未到，或判斷本次不行動時回傳 nullopt。
-    // 只拿得到自己的 PlayerView，讀不到對手的能量與冷卻（A3、E5）
+    // 只拿得到自己的 PlayerView，讀不到對手的能量與冷卻（A3、E5）；下子間隔從 view.placeCooldownRemaining 判斷
     std::optional<Action> decide(const PlayerView&);
     void newGame();  // 新的一局對局時間從 0 重新開始，重設反應時間的計時
 
@@ -62,7 +59,6 @@ private:
     double defenseWeight;
     std::mt19937 rng;
     PatternScores scores;
-    TimeMs placeCooldown;
     int skillEnergyCost;  // spec S2：技能能量夠不夠用
     std::optional<TimeMs> lastDecision;
 };

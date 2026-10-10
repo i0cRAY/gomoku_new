@@ -29,7 +29,7 @@ bool finished(GameStatus s) {
 
 class AIControllerTest : public ::testing::Test {
 protected:
-    AIEngine whiteAI(std::uint32_t seed = 3) { return AIEngine::fromConfig(PlayerId::White, config, seed); }
+    AIEngine whiteAI(std::uint32_t seed = 3) { return AIEngine(PlayerId::White, config.ai, config.skill, seed); }
 
     void humanConfirms(GameController& game) {
         game.selectSkill(PlayerId::Black, SkillId::Dominate);
@@ -102,26 +102,44 @@ TEST_F(AIControllerTest, U7_LocalSessionReportsAIReady) {
     EXPECT_EQ(ready, 1);
 }
 
-// spec §11：AI 對 AI 連續 100 場，每場都要結束，除了被拒絕之外沒有其他錯誤
-TEST_F(AIControllerTest, A1_AIVersusAISmokeTest100Games) {
-    int draws = 0;
-    for (std::uint32_t game = 0; game < 100; ++game) {
+// spec §11：AI 對 AI，指定比賽模式跑 50 場（不同 seed）。每場都要在 30 分鐘內結束，
+// 除了被拒絕之外不能有其他錯誤（例外）
+namespace {
+
+void runSmokeGames(MatchMode mode) {
+    constexpr std::uint32_t kGames = 50;
+    for (std::uint32_t game = 0; game < kGames; ++game) {
         MatchConfig match;
-        const MatchConfig& other = match;
+        match.mode = mode;
 
         GameController controller{match};
-        controller.attachAI(PlayerId::Black, AIEngine::fromConfig(PlayerId::Black, match, game * 2 + 1));
-        controller.attachAI(PlayerId::White, AIEngine::fromConfig(PlayerId::White, other, game * 2 + 2));
+        controller.attachAI(PlayerId::Black, AIEngine(PlayerId::Black, match.ai, match.skill, game * 2 + 1));
+        controller.attachAI(PlayerId::White, AIEngine(PlayerId::White, match.ai, match.skill, game * 2 + 2));
         ASSERT_EQ(controller.viewFor(PlayerId::Black).status, GameStatus::Countdown) << "game " << game;
 
         TimeMs t = -match.countdown;
         while (!finished(controller.viewFor(PlayerId::Black).status) && t <= kMatchLimit) {
-            controller.tick(t);
+            ASSERT_NO_THROW(controller.tick(t)) << "game " << game << " t=" << t;
             t += kTick;
         }
-        const GameStatus result = controller.viewFor(PlayerId::Black).status;
-        ASSERT_TRUE(finished(result)) << "game " << game << " 沒有在 30 分鐘內結束";
-        draws += result == GameStatus::Draw ? 1 : 0;
+        const PlayerView view = controller.viewFor(PlayerId::Black);
+        ASSERT_TRUE(finished(view.status)) << "game " << game << " 沒有在 30 分鐘內結束";
+        if (mode == MatchMode::TimeLimit) {
+            EXPECT_LE(t - kTick, match.timeLimit) << "game " << game;  // W7：時間到就結束
+        } else {
+            const bool reachedTarget = view.scores[0] >= match.targetScore || view.scores[1] >= match.targetScore;
+            const bool boardFull = countStones(view.board, Cell::Empty) == 0;
+            EXPECT_TRUE(reachedTarget || boardFull) << "game " << game;  // W8、W4
+        }
     }
-    RecordProperty("draws", draws);
+}
+
+}  // namespace
+
+TEST_F(AIControllerTest, A1_AIVersusAISmokeTestTimeLimit50Games) {
+    runSmokeGames(MatchMode::TimeLimit);
+}
+
+TEST_F(AIControllerTest, A1_AIVersusAISmokeTestTargetScore50Games) {
+    runSmokeGames(MatchMode::ScoreTarget);
 }

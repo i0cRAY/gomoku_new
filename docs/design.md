@@ -303,6 +303,7 @@ struct PlayerView {
     GameStatus status;
     TimeMs now;
     PlayerState self;                    // 只有自己的狀態
+    TimeMs placeCooldownRemaining;       // 自己的下子間隔剩餘毫秒，0 表示已過（spec P1-6、P4）
     double nextEnergyRatio;              // spec E6，下一格的累積比例 0.0–1.0
     std::optional<SkillId> opponentSkillRevealed;  // 對手第一次用技能後才有值，只有名稱（spec S1）
     TimeMs countdownRemaining;           // Countdown 狀態時的剩餘毫秒（spec G2）
@@ -372,6 +373,7 @@ public:
     SkillId chooseSkill();   // 技能選擇階段呼叫，用同一個 seed 的亂數從三項中隨機選（spec A2a）
     // 反應時間未到，或判斷本次不行動時，回傳 nullopt
     // 只拿得到自己的 PlayerView，讀不到對手的不公開資訊（spec A3、E5）；禁區從 view.zones 讀
+    // 下子間隔是否已過從 view.placeCooldownRemaining 判斷
     std::optional<Action> decide(const PlayerView&);
     // 以下公開，方便單元測試
     // pos 必須是空格：回傳假設 player 下在 pos 後，dirIndex 方向最強的棋型；邊界、Destroyed 與對手棋子視為擋住（A13）

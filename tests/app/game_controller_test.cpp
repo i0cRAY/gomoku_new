@@ -209,6 +209,19 @@ TEST_F(GameControllerTest, P4_FirstPlacementIgnoresCooldown) {
     EXPECT_TRUE(controller.submit(white(8, 8), 0).accepted);
 }
 
+TEST_F(GameControllerTest, P1_P4_ViewShowsOwnPlaceCooldownRemaining) {
+    startMatch();
+    EXPECT_EQ(controller.viewFor(PlayerId::Black).placeCooldownRemaining, 0);  // P4：還沒下過子
+    ASSERT_TRUE(controller.submit(black(7, 7), 0).accepted);
+    controller.tick(200);
+    EXPECT_EQ(controller.viewFor(PlayerId::Black).placeCooldownRemaining, config.placeCooldown - 200);
+    EXPECT_EQ(controller.viewFor(PlayerId::White).placeCooldownRemaining, 0);  // 只反映自己的下子間隔
+    controller.tick(config.placeCooldown);
+    EXPECT_EQ(controller.viewFor(PlayerId::Black).placeCooldownRemaining, 0);
+    controller.tick(config.placeCooldown + 300);
+    EXPECT_EQ(controller.viewFor(PlayerId::Black).placeCooldownRemaining, 0);  // 不會變成負數
+}
+
 TEST_F(GameControllerTest, P5_SecondRequestForSameCellIsOccupied) {
     startMatch();
     EXPECT_TRUE(controller.submit(white(5, 5), 300).accepted);

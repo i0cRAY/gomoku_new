@@ -49,7 +49,7 @@ void LocalSession::leave() {
 }
 
 void LocalSession::attachAI(PlayerId player, std::uint32_t seed) {
-    controller.attachAI(player, AIEngine::fromConfig(player, config, seed));
+    controller.attachAI(player, AIEngine(player, config.ai, config.skill, seed));
     if (controller.viewFor(player).status == GameStatus::Countdown && !gameClock.isRunning()) {
         gameClock.start(-config.countdown);
     }

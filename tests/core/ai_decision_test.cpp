@@ -17,7 +17,7 @@ struct ViewSpec {
     std::vector<std::string_view> rows;
     SkillId skill = SkillId::Dominate;
     int energy = 5;  // ≥ 3：夠用技能（S2）
-    std::optional<TimeMs> lastPlaceTime = std::nullopt;
+    TimeMs cooldownRemaining = 0;  // 0：下子間隔已過
     TimeMs now = 30000;
 };
 
@@ -30,13 +30,12 @@ PlayerView viewOf(const ViewSpec& spec) {
     v.now = spec.now;
     v.self.energy = spec.energy;
     v.self.skill = spec.skill;
-    v.self.lastPlaceTime = spec.lastPlaceTime;
+    v.placeCooldownRemaining = spec.cooldownRemaining;
     return v;
 }
 
 AIEngine engine(std::uint32_t seed = 1) {
-    MatchConfig config;
-    return AIEngine::fromConfig(PlayerId::Black, config, seed);
+    return AIEngine(PlayerId::Black, AIConfig{}, SkillConfig{}, seed);
 }
 
 std::optional<Pos> placedAt(const std::optional<Action>& action) {
@@ -126,7 +125,7 @@ TEST(AIDecisionTest, A5_CannotPlaceButBombReadyBombs) {
     AIEngine ai = engine();
     ViewSpec spec{{"", "", "", "", "", "", "", ".XOOOO..."}};
     spec.skill = SkillId::Bomb;
-    spec.lastPlaceTime = spec.now - 200;  // 下子間隔未過
+    spec.cooldownRemaining = 300;  // 下子間隔未過
     const auto action = ai.decide(viewOf(spec));
     const SkillAction* bomb = skillOf(action);
     ASSERT_NE(bomb, nullptr);
@@ -235,15 +234,43 @@ TEST(AIDecisionTest, A2_NoActionStillCountsAsDecision) {
 }
 
 TEST(AIDecisionTest, A2_ReactionTimeComesFromConfig) {
-    MatchConfig config;
-    AIEngine ai = AIEngine::fromConfig(PlayerId::Black, config, 1);
+    EXPECT_EQ(AIConfig{}.reactionTime, kReaction);
+    AIConfig config;
+    config.reactionTime = 600;
+    AIEngine ai(PlayerId::Black, config, SkillConfig{}, 1);
     ViewSpec spec{{""}};
     spec.now = 0;
     ASSERT_TRUE(ai.decide(viewOf(spec)).has_value());
-    spec.now = config.ai.reactionTime - 1;
+    spec.now = config.reactionTime - 1;
     EXPECT_EQ(ai.decide(viewOf(spec)), std::nullopt);
-    spec.now = config.ai.reactionTime;
+    spec.now = config.reactionTime;
     EXPECT_TRUE(ai.decide(viewOf(spec)).has_value());
+}
+
+// ---- A1：下子間隔從 PlayerView 讀取 ----
+
+TEST(AIDecisionTest, A1_NoPlacementWhileCooldownRemaining) {
+    AIEngine ai = engine();
+    ViewSpec spec{{""}};
+    spec.cooldownRemaining = 1;
+    EXPECT_EQ(ai.decide(viewOf(spec)), std::nullopt);
+    spec.now += kReaction;
+    spec.cooldownRemaining = 0;
+    EXPECT_TRUE(placedIn(ai.decide(viewOf(spec)), cells({{7, 7}})));
+}
+
+// ---- S2、A5：技能耗能取自 SkillConfig ----
+
+TEST(AIDecisionTest, S2_A5_BombEnergyCostComesFromConfig) {
+    SkillConfig skill;
+    skill.energyCost = 4;
+    AIEngine ai(PlayerId::Black, AIConfig{}, skill, 1);
+    ViewSpec spec{{"", "", "", "", "", "", "", "..OOOO..."}};
+    spec.skill = SkillId::Bomb;
+    spec.energy = 3;  // 預設耗能 3 夠用，但這裡要 4
+    const auto action = ai.decide(viewOf(spec));
+    EXPECT_EQ(skillOf(action), nullptr);
+    EXPECT_TRUE(placedIn(action, cells({{1, 7}, {6, 7}})));
 }
 
 TEST(AIDecisionTest, A2_NewGameResetsReactionTimer) {

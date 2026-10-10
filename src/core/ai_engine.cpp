@@ -111,21 +111,13 @@ Pattern twoLevel(Line line) {
 
 }  // namespace
 
-AIEngine::AIEngine(PlayerId self, TimeMs reactionTime, double defenseWeight, std::uint32_t seed,
-                   PatternScores scores, TimeMs placeCooldown, int skillEnergyCost)
+AIEngine::AIEngine(PlayerId self, const AIConfig& ai, const SkillConfig& skill, std::uint32_t seed)
     : self(self),
-      reactionTime(reactionTime),
-      defenseWeight(defenseWeight),
+      reactionTime(ai.reactionTime),
+      defenseWeight(ai.defenseWeight),
       rng(seed),
-      scores(scores),
-      placeCooldown(placeCooldown),
-      skillEnergyCost(skillEnergyCost) {}
-
-AIEngine AIEngine::fromConfig(PlayerId self, const MatchConfig& config, std::uint32_t seed) {
-    const AIConfig& ai = config.ai;
-    return AIEngine(self, ai.reactionTime, ai.defenseWeight, seed, ai.scores, config.placeCooldown,
-                    config.skill.energyCost);
-}
+      scores(ai.scores),
+      skillEnergyCost(skill.energyCost) {}
 
 SkillId AIEngine::chooseSkill() {
     constexpr SkillId kSkills[] = {SkillId::Bomb, SkillId::Dominate, SkillId::Destroy};  // A2a
@@ -137,7 +129,7 @@ void AIEngine::newGame() {
     lastDecision.reset();
 }
 
-// 決策優先順序 A4 → A5 → A6 → A7 → A8 → A9；任何下子動作在不能下子時都改為本次不行動
+// 決策優先順序 A4 → A5 → A6 → A7 → A9；任何下子動作在不能下子時都改為本次不行動
 std::optional<Action> AIEngine::decide(const PlayerView& view) {
     if (view.status != GameStatus::Running) {
         return std::nullopt;
@@ -237,7 +229,7 @@ std::optional<Pos> AIEngine::bestPlacement(const Board& board) {
 }
 
 bool AIEngine::canPlace(const PlayerView& view) const {
-    return view.self.energy >= 1 && (!view.self.lastPlaceTime || view.now - *view.self.lastPlaceTime >= placeCooldown);
+    return view.self.energy >= 1 && view.placeCooldownRemaining <= 0;
 }
 
 bool AIEngine::skillReady(const PlayerView& view, SkillId skill) const {
