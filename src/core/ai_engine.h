@@ -34,8 +34,9 @@ public:
 
     // A10：進攻分 + 防守分 × w（含雙活三加成）
     double score(const Board&, Pos) const;
-    // A10–A12：全盤最高分的空格；同分隨機挑一格；空盤下中央；棋盤滿了回傳 nullopt
-    std::optional<Pos> bestPlacement(const Board&);
+    // A10–A12：全盤最高分的空格（排除 excluded，A5a）；同分隨機挑一格；
+    // 沒有任何棋子且中央能下時下中央；沒有可下的格子回傳 nullopt
+    std::optional<Pos> bestPlacement(const Board&, const std::vector<Pos>& excluded = {});
 
 private:
     struct Threat {
@@ -47,11 +48,15 @@ private:
     double sideScore(const Board&, Pos, PlayerId) const;
     bool canPlace(const PlayerView&) const;
     bool skillReady(const PlayerView&, SkillId) const;
+    std::vector<Pos> opponentZones(const PlayerView&) const;  // A5a：當下對自己有效的禁區格
     std::vector<Pos> fivePoints(const Board&, PlayerId) const;
     Threat threatOf(const Board&) const;  // 對手的威脅分（spec A5）：成五點數量，再比全盤最高進攻分
-    std::optional<Action> respondToFivePoints(const PlayerView&, const std::vector<Pos>& points);
+    std::optional<Action> respondToFivePoints(const PlayerView&, const std::vector<Pos>& points,
+                                              const std::vector<Pos>& zones);
+    std::vector<Pos> threatStones(const Board&, const std::vector<Pos>& points) const;  // spec A5 名詞
     std::optional<Pos> bestBombTarget(const Board&, const std::vector<Pos>& points) const;
-    std::optional<Pos> openThreeBlock(const Board&) const;  // A7
+    std::optional<Pos> bestDestroyTarget(const Board&, const std::vector<Pos>& points);  // A5b
+    std::optional<Pos> openThreeBlock(const Board&, const std::vector<Pos>& zones) const;  // A7
     std::optional<Pos> highestScore(const Board&, const std::vector<Pos>& candidates) const;
 
     PlayerId self;
@@ -60,5 +65,6 @@ private:
     std::mt19937 rng;
     PatternScores scores;
     int skillEnergyCost;  // spec S2：技能能量夠不夠用
+    int destroyRadius;    // spec SX2：5×5 = 中心 ±2
     std::optional<TimeMs> lastDecision;
 };

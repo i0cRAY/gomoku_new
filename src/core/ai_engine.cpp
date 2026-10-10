@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdlib>
 #include <iterator>
 #include <vector>
 
@@ -19,6 +20,25 @@ constexpr int kReach = kWinLength - 1;           // 連五只會用到中心左�
 constexpr int kLineLength = 2 * kReach + 1;
 constexpr int kCenter = kReach;
 constexpr double kScoreEpsilon = 1e-9;  // 比較同分用
+constexpr int kPlaceEnergy = 1;         // spec §5：每子消耗
+
+bool contains(const std::vector<Pos>& cells, Pos p) {
+    return std::find(cells.begin(), cells.end(), p) != cells.end();
+}
+
+std::vector<Pos> without(std::vector<Pos> cells, const std::vector<Pos>& excluded) {
+    cells.erase(std::remove_if(cells.begin(), cells.end(), [&](Pos p) { return contains(excluded, p); }),
+                cells.end());
+    return cells;
+}
+
+bool isStone(Cell c) {
+    return c == Cell::Black || c == Cell::White;
+}
+
+Cell stoneOf(PlayerId player) {
+    return player == PlayerId::Black ? Cell::Black : Cell::White;
+}
 
 enum class LineCell { Own, Empty, Blocked };
 using Line = std::array<LineCell, kLineLength>;
@@ -117,7 +137,8 @@ AIEngine::AIEngine(PlayerId self, const AIConfig& ai, const SkillConfig& skill, 
       defenseWeight(ai.defenseWeight),
       rng(seed),
       scores(ai.scores),
-      skillEnergyCost(skill.energyCost) {}
+      skillEnergyCost(skill.energyCost),
+      destroyRadius(skill.destroyRadius) {}
 
 SkillId AIEngine::chooseSkill() {
     constexpr SkillId kSkills[] = {SkillId::Bomb, SkillId::Dominate, SkillId::Destroy};  // A2a
@@ -129,7 +150,8 @@ void AIEngine::newGame() {
     lastDecision.reset();
 }
 
-// 決策優先順序 A4 → A5 → A6 → A7 → A9；任何下子動作在不能下子時都改為本次不行動
+// 決策優先順序 A4 → A5 → A6 → A7 → A8a → A9；任何下子動作在不能下子時都改為本次不行動。
+// 所有「下在某格」的候選都先排除對手的禁區（A5a）
 std::optional<Action> AIEngine::decide(const PlayerView& view) {
     if (view.status != GameStatus::Running) {
         return std::nullopt;
@@ -140,6 +162,7 @@ std::optional<Action> AIEngine::decide(const PlayerView& view) {
     lastDecision = view.now;  // 不行動也算一次決策
 
     const Board& board = view.board;
+    const std::vector<Pos> zones = opponentZones(view);
     const bool placeable = canPlace(view);
     auto place = [&](std::optional<Pos> pos) -> std::optional<Action> {
         if (!pos || !placeable) {
@@ -149,12 +172,12 @@ std::optional<Action> AIEngine::decide(const PlayerView& view) {
     };
 
     // A4：自己一步成五
-    if (const auto own = fivePoints(board, self); !own.empty()) {
+    if (const auto own = without(fivePoints(board, self), zones); !own.empty()) {
         return place(highestScore(board, own));
     }
-    // A5：對手有成五點
+    // A5：對手有成五點（成五點在禁區內也算威脅，只是擋不了）
     if (const auto threats = fivePoints(board, opponent(self)); !threats.empty()) {
-        return respondToFivePoints(view, threats);
+        return respondToFivePoints(view, threats, zones);
     }
     // A6：自己能形成活四
     std::vector<Pos> openFours;
@@ -168,15 +191,20 @@ std::optional<Action> AIEngine::decide(const PlayerView& view) {
             }
         }
     }
-    if (!openFours.empty()) {
-        return place(highestScore(board, openFours));
+    if (const auto fours = without(openFours, zones); !fours.empty()) {
+        return place(highestScore(board, fours));
     }
     // A7：對手有活三
-    if (const auto block = openThreeBlock(board)) {
+    if (const auto block = openThreeBlock(board, zones)) {
         return place(block);
     }
+    // A8a：霸道用完後補充，並留 1 格能量可以馬上下子（技能不受下子間隔影響，S5）
+    if (view.self.skill == SkillId::Dominate && view.self.dominateCharges == 0 &&
+        view.self.energy >= skillEnergyCost + kPlaceEnergy) {
+        return SkillAction{self, SkillId::Dominate, std::nullopt};
+    }
     // A9
-    return placeable ? place(bestPlacement(board)) : std::nullopt;
+    return placeable ? place(bestPlacement(board, zones)) : std::nullopt;
 }
 
 int AIEngine::patternScore(Pattern pattern, const PatternScores& scores) {
@@ -197,16 +225,16 @@ double AIEngine::score(const Board& board, Pos pos) const {
     return sideScore(board, pos, self) + sideScore(board, pos, opponent(self)) * defenseWeight;
 }
 
-std::optional<Pos> AIEngine::bestPlacement(const Board& board) {
+std::optional<Pos> AIEngine::bestPlacement(const Board& board, const std::vector<Pos>& excluded) {
     const Pos center{Board::kSize / 2, Board::kSize / 2};
     std::vector<Pos> best;
     double bestScore = 0.0;
-    bool boardEmpty = true;
+    bool noStones = true;
     for (int y = 0; y < Board::kSize; ++y) {
         for (int x = 0; x < Board::kSize; ++x) {
             const Pos p{x, y};
-            if (!board.isEmpty(p)) {
-                boardEmpty = false;
+            noStones = noStones && !isStone(board.at(p));
+            if (!board.isEmpty(p) || contains(excluded, p)) {
                 continue;
             }
             const double s = score(board, p);
@@ -218,8 +246,8 @@ std::optional<Pos> AIEngine::bestPlacement(const Board& board) {
             }
         }
     }
-    if (boardEmpty) {
-        return center;  // A12
+    if (noStones && board.isEmpty(center) && !contains(excluded, center)) {
+        return center;  // A12：中央已摧毀或在禁區內時改用評分
     }
     if (best.empty()) {
         return std::nullopt;
@@ -233,7 +261,20 @@ bool AIEngine::canPlace(const PlayerView& view) const {
 }
 
 bool AIEngine::skillReady(const PlayerView& view, SkillId skill) const {
+    if (skill == SkillId::Destroy && view.self.destroyUsed) {
+        return false;  // SX3
+    }
     return view.self.skill == skill && view.self.energy >= skillEnergyCost;  // S3：沒有冷卻，只看能量
+}
+
+std::vector<Pos> AIEngine::opponentZones(const PlayerView& view) const {
+    std::vector<Pos> cells;
+    for (const ZoneCell& zone : view.zones) {
+        if (zone.owner != self && view.now < zone.expiresAt) {  // SZ3：自己的禁區不限制自己
+            cells.push_back(zone.pos);
+        }
+    }
+    return cells;
 }
 
 std::vector<Pos> AIEngine::fivePoints(const Board& board, PlayerId player) const {
@@ -271,27 +312,35 @@ AIEngine::Threat AIEngine::threatOf(const Board& board) const {
     return threat;
 }
 
-// A5：1 個成五點且能下子 → 擋；擋不完或不能下子時，炸彈好了就炸；擋不完又沒有炸彈時擋威脅分降最多的點
-std::optional<Action> AIEngine::respondToFivePoints(const PlayerView& view, const std::vector<Pos>& points) {
+// A5：1 個成五點且能擋 → 擋。擋不完、不能下子或成五點都在禁區內時，依序考慮炸彈、摧毀；
+// 都不能用時，能擋就擋威脅分降最多的點，否則本次不行動
+std::optional<Action> AIEngine::respondToFivePoints(const PlayerView& view, const std::vector<Pos>& points,
+                                                    const std::vector<Pos>& zones) {
     const Board& board = view.board;
     const bool placeable = canPlace(view);
-    if (points.size() == 1 && placeable) {
-        return PlaceAction{self, points.front()};
+    const std::vector<Pos> blockable = without(points, zones);  // A5a
+    if (points.size() == 1 && placeable && !blockable.empty()) {
+        return PlaceAction{self, blockable.front()};
     }
     if (skillReady(view, SkillId::Bomb)) {
         if (const auto target = bestBombTarget(board, points)) {
             return SkillAction{self, SkillId::Bomb, *target};
         }
     }
-    if (!placeable) {
+    if (skillReady(view, SkillId::Destroy)) {
+        if (const auto target = bestDestroyTarget(board, points)) {
+            return SkillAction{self, SkillId::Destroy, *target};
+        }
+    }
+    if (!placeable || blockable.empty()) {
         return std::nullopt;
     }
     std::optional<Pos> best;
     Threat bestThreat{};
     double bestOwnScore = 0.0;
-    for (Pos p : points) {
+    for (Pos p : blockable) {
         Board after = board;
-        after.set(p, self == PlayerId::Black ? Cell::Black : Cell::White);
+        after.set(p, stoneOf(self));
         const Threat threat = threatOf(after);
         const double own = score(board, p);
         const bool better = !best || threat < bestThreat ||
@@ -305,11 +354,11 @@ std::optional<Action> AIEngine::respondToFivePoints(const PlayerView& view, cons
     return PlaceAction{self, *best};
 }
 
-// 候選：與成五點在同一條線上、能和它共同構成連五的對手棋子；選炸掉後威脅分降最多的那顆
-std::optional<Pos> AIEngine::bestBombTarget(const Board& board, const std::vector<Pos>& points) const {
+// 與成五點在同一條線上、能和它共同構成連五的對手棋子
+std::vector<Pos> AIEngine::threatStones(const Board& board, const std::vector<Pos>& points) const {
     const PlayerId enemy = opponent(self);
-    const Cell enemyStone = enemy == PlayerId::Black ? Cell::Black : Cell::White;
-    std::vector<Pos> candidates;
+    const Cell enemyStone = stoneOf(enemy);
+    std::vector<Pos> stones;
     for (Pos point : points) {
         for (int d = 0; d < kDirectionCount; ++d) {
             if (patternAt(board, point, enemy, d) != Pattern::Five) {
@@ -319,18 +368,22 @@ std::optional<Pos> AIEngine::bestBombTarget(const Board& board, const std::vecto
             for (int sign : {1, -1}) {
                 Pos p{point.x + dir.dx * sign, point.y + dir.dy * sign};
                 while (board.inBounds(p) && board.at(p) == enemyStone) {
-                    if (std::find(candidates.begin(), candidates.end(), p) == candidates.end()) {
-                        candidates.push_back(p);
+                    if (!contains(stones, p)) {
+                        stones.push_back(p);
                     }
                     p = Pos{p.x + dir.dx * sign, p.y + dir.dy * sign};
                 }
             }
         }
     }
+    return stones;
+}
 
+// 選炸掉後威脅分降最多的那顆威脅棋子
+std::optional<Pos> AIEngine::bestBombTarget(const Board& board, const std::vector<Pos>& points) const {
     std::optional<Pos> best;
     Threat bestThreat{};
-    for (Pos c : candidates) {
+    for (Pos c : threatStones(board, points)) {
         Board after = board;
         after.set(c, Cell::Empty);
         const Threat threat = threatOf(after);
@@ -342,12 +395,54 @@ std::optional<Pos> AIEngine::bestBombTarget(const Board& board, const std::vecto
     return best;
 }
 
+// A5b：範圍至少涵蓋一顆威脅棋子，且「範圍內對手棋子數 − 己方棋子數」最大的中心點；同分隨機挑（A11）
+std::optional<Pos> AIEngine::bestDestroyTarget(const Board& board, const std::vector<Pos>& points) {
+    const std::vector<Pos> stones = threatStones(board, points);
+    const Cell ownStone = stoneOf(self);
+    const Cell enemyStone = stoneOf(opponent(self));
+    auto inArea = [&](Pos center, Pos p) {
+        return std::abs(p.x - center.x) <= destroyRadius && std::abs(p.y - center.y) <= destroyRadius;
+    };
+
+    std::vector<Pos> best;
+    int bestValue = 0;
+    for (int y = 0; y < Board::kSize; ++y) {
+        for (int x = 0; x < Board::kSize; ++x) {
+            const Pos center{x, y};
+            if (std::none_of(stones.begin(), stones.end(), [&](Pos s) { return inArea(center, s); })) {
+                continue;
+            }
+            int value = 0;
+            for (int dy = -destroyRadius; dy <= destroyRadius; ++dy) {
+                for (int dx = -destroyRadius; dx <= destroyRadius; ++dx) {
+                    const Pos p{x + dx, y + dy};
+                    if (!board.inBounds(p)) {
+                        continue;
+                    }
+                    value += board.at(p) == enemyStone ? 1 : board.at(p) == ownStone ? -1 : 0;
+                }
+            }
+            if (best.empty() || value > bestValue) {
+                best = {center};
+                bestValue = value;
+            } else if (value == bestValue) {
+                best.push_back(center);
+            }
+        }
+    }
+    if (best.empty()) {
+        return std::nullopt;
+    }
+    std::uniform_int_distribution<std::size_t> pick(0, best.size() - 1);
+    return best[pick(rng)];
+}
+
 // A7：對手的「活四點」（下了會成活四的空格）代表一個活三。同一條線上的活四點視為同一個活三，
 // 候選擋點是下了之後讓該線所有活四點都失效的空格（兩端端點、跳三中間的空格），
-// 全部活三的候選一起比較，選對自己評分最高的一格
-std::optional<Pos> AIEngine::openThreeBlock(const Board& board) const {
+// 全部活三的候選一起比較，選對自己評分最高的一格；對手禁區內的格子不當候選（A5a）
+std::optional<Pos> AIEngine::openThreeBlock(const Board& board, const std::vector<Pos>& zones) const {
     const PlayerId enemy = opponent(self);
-    const Cell ownStone = self == PlayerId::Black ? Cell::Black : Cell::White;
+    const Cell ownStone = stoneOf(self);
 
     struct Group {
         int dir;
@@ -381,8 +476,7 @@ std::optional<Pos> AIEngine::openThreeBlock(const Board& board) const {
         for (Pos point : g.points) {
             for (int k = -kReach; k <= kReach; ++k) {
                 const Pos c{point.x + dir.dx * k, point.y + dir.dy * k};
-                if (!board.inBounds(c) || !board.isEmpty(c) ||
-                    std::find(candidates.begin(), candidates.end(), c) != candidates.end()) {
+                if (!board.inBounds(c) || !board.isEmpty(c) || contains(zones, c) || contains(candidates, c)) {
                     continue;
                 }
                 Board after = board;
