@@ -126,3 +126,30 @@ TEST(PatternTest, A10_OccupiedCellIsNone) {
     const Board board = boardFromRows({"..XXXX..."});
     EXPECT_EQ(AIEngine::patternAt(board, {3, 0}, PlayerId::Black, kHorizontal), Pattern::None);
 }
+
+// ---- A13：已摧毀的格子視同邊界（T15 🔄）----
+
+TEST(PatternTest, A13_DestroyedCellBlocksLikeEdge) {
+    EXPECT_EQ(blackRow("#XXX..", 4), Pattern::Four);   // #XXXX_：只剩一個成五點
+    EXPECT_EQ(blackRow("XXX...", 3), Pattern::Four);   // 和碰到棋盤邊界一樣
+    EXPECT_EQ(blackRow("OXXX..", 4), Pattern::Four);   // 也和被對手擋住一樣
+}
+
+TEST(PatternTest, A13_DestroyedCellTurnsOpenThreeIntoThree) {
+    EXPECT_EQ(blackRow("..XX...", 4), Pattern::OpenThree);
+    EXPECT_EQ(blackRow("..XX.#.", 4), Pattern::Three);  // _XXX#：右邊被擋，最多衝四
+}
+
+TEST(PatternTest, A13_DestroyedCellBreaksFive) {
+    EXPECT_EQ(blackRow("XX#.XX#", 3), Pattern::None);  // 夾在兩個已摧毀的格子之間只剩 3 格，永遠連不成五
+    EXPECT_EQ(blackRow("XX.XX#", 2), Pattern::Five);   // 對照：已摧毀的格子在連線外就不影響
+}
+
+TEST(PatternTest, A13_DestroyedCellIsNotACandidate) {
+    EXPECT_EQ(blackRow(".XXXX#", 5), Pattern::None);  // 已摧毀的格子不能下
+}
+
+TEST(PatternTest, A13_DestroyedBlocksVertically) {
+    const Board board = boardFromRows({".", "X", "X", "X", ".", "#"});
+    EXPECT_EQ(AIEngine::patternAt(board, {0, 4}, PlayerId::Black, kVertical), Pattern::Four);
+}

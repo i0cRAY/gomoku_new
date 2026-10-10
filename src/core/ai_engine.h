@@ -30,7 +30,8 @@ public:
     std::optional<Action> decide(const PlayerView&);
     void newGame();  // 新的一局對局時間從 0 重新開始，重設反應時間的計時
 
-    // pos 必須是空格：回傳假設 player 下在 pos 後，dirIndex 方向最強的棋型；邊界與對手棋子視為擋住
+    // pos 必須是空格：回傳假設 player 下在 pos 後，dirIndex 方向最強的棋型。
+    // 邊界、對手棋子與已摧毀的格子都視為擋住（A13）；禁區不在 Board 上，所以照空格判斷（spec §8.2）
     static Pattern patternAt(const Board&, Pos, PlayerId, int dirIndex);
     static int patternScore(Pattern, const PatternScores& = {});
 
