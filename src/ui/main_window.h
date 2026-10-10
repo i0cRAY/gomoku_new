@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QCheckBox>
 #include <QComboBox>
 #include <QLabel>
 #include <QMainWindow>
@@ -60,6 +61,7 @@ private:
     QComboBox* modeBox;
     QComboBox* timeLimitBox;
     QSpinBox* targetScoreBox;
+    QCheckBox* showAiInfoBox;  // M1a
     SkillSelectView* skillPage;
     QWidget* gamePage;
     BoardView* board;
@@ -72,6 +74,7 @@ private:
 
     std::unique_ptr<GameSession> session;
     std::vector<PlayerId> localPlayers;
+    std::optional<PlayerId> aiPlayer;  // M1 才有值
     PlayerId primary = PlayerId::Black;  // 棋盤與結果畫面以這一方的 PlayerView 為準
     std::array<BoardInput, 2> inputs{BoardInput(PlayerId::Black), BoardInput(PlayerId::White)};
     std::map<PlayerId, SkillId> lastConfirmed;  // G4：再來一局時預設選中上一局的技能

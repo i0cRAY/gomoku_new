@@ -103,6 +103,11 @@ QWidget* MainWindow::buildMenuPage() {
     layout->addLayout(modeRow);
     connect(modeBox, &QComboBox::currentIndexChanged, this, &MainWindow::refreshModeWidgets);
     refreshModeWidgets();
+
+    // M1a：只影響人機對戰的畫面
+    showAiInfoBox = new QCheckBox(QStringLiteral("顯示 AI 資訊（僅人機對戰）"));
+    showAiInfoBox->setChecked(MatchConfig{}.showAiInfo);
+    layout->addWidget(showAiInfoBox, 0, Qt::AlignCenter);
     layout->addSpacing(12);
 
     auto addButton = [&](const QString& text, bool enabled) {
@@ -170,14 +175,19 @@ MatchConfig MainWindow::configFromMenu() const {
     result.mode = static_cast<MatchMode>(modeBox->currentData().toInt());
     result.timeLimit = timeLimitBox->currentData().toLongLong();
     result.targetScore = targetScoreBox->value();
+    result.showAiInfo = showAiInfoBox->isChecked();
     return result;
 }
 
 void MainWindow::startVsAI() {
     config = configFromMenu();
-    blackHud->setTitle(QString());
-    whiteHud->hide();  // E5：只顯示自己的資訊
+    // E5：只顯示自己的資訊；開啟 M1a 時另外顯示 AI 的唯讀 HUD（U10）
+    blackHud->setTitle(config.showAiInfo ? QStringLiteral("你（黑方）") : QString());
+    whiteHud->setTitle(QStringLiteral("AI（白方）"));
+    whiteHud->setReadOnly(true);
+    whiteHud->setVisible(config.showAiInfo);
     startSession({PlayerId::Black});
+    aiPlayer = PlayerId::White;
     // 先讓技能選擇畫面就緒，AI 確定時才看得到「對手已準備」
     auto* local = static_cast<LocalSession*>(session.get());
     local->attachAI(PlayerId::White, QRandomGenerator::global()->generate());
@@ -187,6 +197,7 @@ void MainWindow::startLocalDev() {
     config = configFromMenu();
     blackHud->setTitle(QStringLiteral("黑方（左鍵、Q）"));
     whiteHud->setTitle(QStringLiteral("白方（右鍵、P）"));
+    whiteHud->setReadOnly(false);
     whiteHud->show();  // M3：HUD 同時顯示雙方（E5 的例外）
     startSession({PlayerId::Black, PlayerId::White});
 }
@@ -194,6 +205,7 @@ void MainWindow::startLocalDev() {
 void MainWindow::startSession(std::vector<PlayerId> players) {
     localPlayers = std::move(players);
     primary = localPlayers.front();
+    aiPlayer.reset();
     lastConfirmed.clear();
     lastStatus.reset();
     blackHud->setConfig(config);
@@ -248,6 +260,9 @@ void MainWindow::refresh() {
         input(p).onViewChanged(own);
         hud(p)->setView(own);
         hud(p)->setTargeting(input(p).isTargeting());
+    }
+    if (aiPlayer && config.showAiInfo) {
+        hud(*aiPlayer)->setView(session->viewFor(*aiPlayer));  // M1a：只有 UI 讀 AI 的資訊，AIEngine 不受影響
     }
     std::optional<int> previewRadius;
     bool targeting = false;

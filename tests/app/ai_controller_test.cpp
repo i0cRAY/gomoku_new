@@ -87,6 +87,38 @@ TEST_F(AIControllerTest, M1_A2_AIPaceFollowsConfigReactionTime) {
     EXPECT_EQ(countStones(game.viewFor(PlayerId::Black).board, Cell::White), 2);
 }
 
+// M1a 只影響 UI：開關開啟與否，AI 拿到的都是 viewFor(AI 自己)，所以同一個 seed 下的行為完全相同
+TEST_F(AIControllerTest, M1a_A3_ShowAiInfoDoesNotChangeWhatAISees) {
+    auto play = [this](bool showAiInfo) {
+        MatchConfig match = config;
+        match.showAiInfo = showAiInfo;
+        match.regenInterval = 500;
+        GameController game{match};
+        game.attachAI(PlayerId::White, AIEngine(PlayerId::White, match.ai, match.skill, 11));
+        game.selectSkill(PlayerId::Black, SkillId::Bomb);
+        game.confirmSkill(PlayerId::Black);
+        std::vector<Board> boards;
+        for (TimeMs t = 0; t <= 20000; t += kTick) {
+            if (t % 1000 == 0) {
+                game.submit(PlaceAction{PlayerId::Black, Pos{static_cast<int>(t / 1000) % Board::kSize, 3}}, t);
+            }
+            game.tick(t);
+            boards.push_back(game.viewFor(PlayerId::Black).board);
+        }
+        return boards;
+    };
+    const std::vector<Board> hidden = play(false);
+    const std::vector<Board> shown = play(true);
+    ASSERT_EQ(hidden.size(), shown.size());
+    for (std::size_t i = 0; i < hidden.size(); ++i) {
+        for (int y = 0; y < Board::kSize; ++y) {
+            for (int x = 0; x < Board::kSize; ++x) {
+                ASSERT_EQ(hidden[i].at({x, y}), shown[i].at({x, y})) << "tick " << i;
+            }
+        }
+    }
+}
+
 TEST_F(AIControllerTest, G4_AIChoosesAgainAfterRestart) {
     GameController game{config};
     game.attachAI(PlayerId::White, whiteAI());
