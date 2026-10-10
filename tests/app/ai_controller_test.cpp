@@ -72,6 +72,21 @@ TEST_F(AIControllerTest, A1_AIRespectsEnergyAndPlaceInterval) {
     EXPECT_LE(countStones(game.viewFor(PlayerId::Black).board, Cell::White), 3);
 }
 
+TEST_F(AIControllerTest, M1_A2_AIPaceFollowsConfigReactionTime) {
+    // 能量與下子間隔都不是限制（每 500 ms 回 1 格），出手速度只由 AIConfig::reactionTime 決定
+    config.regenInterval = 500;
+    config.ai.reactionTime = 1000;
+    GameController game{config};
+    game.attachAI(PlayerId::White, whiteAI());
+    humanConfirms(game);
+    game.tick(0);
+    EXPECT_EQ(countStones(game.viewFor(PlayerId::Black).board, Cell::White), 1);
+    game.tick(500);
+    EXPECT_EQ(countStones(game.viewFor(PlayerId::Black).board, Cell::White), 1);  // 預設 350 ms 會在這裡出手
+    game.tick(1000);
+    EXPECT_EQ(countStones(game.viewFor(PlayerId::Black).board, Cell::White), 2);
+}
+
 TEST_F(AIControllerTest, G4_AIChoosesAgainAfterRestart) {
     GameController game{config};
     game.attachAI(PlayerId::White, whiteAI());
