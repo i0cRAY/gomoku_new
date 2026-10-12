@@ -18,7 +18,7 @@ constexpr TimeMs kReaction = 350;  // spec A2：固定反應時間
 struct ViewSpec {
     std::vector<std::string_view> rows;
     SkillId skill = SkillId::Dominate;
-    int energy = 4;  // A9a：選霸道（消耗 3）時，下子後還留 3 格，可以照常下子
+    int energy = 4;  // A9a：下子後仍 ≥ 技能消耗，可以照常下子
     TimeMs cooldownRemaining = 0;  // 0：下子間隔已過
     std::vector<Pos> zones = {};   // 對手（白）的禁區，尚未到期
     int dominateCharges = 3;  // 次數還沒用完，不觸發 A8a；要測霸道時設為 0
@@ -186,7 +186,9 @@ TEST(AIDecisionTest, A5_DoubleThreatWithDominateStillBlocksOne) {
 }
 
 TEST(AIDecisionTest, A5_DoubleThreatWithBombButNoEnergyForItBlocksOne) {
-    AIEngine ai = engine();
+    SkillConfig skill;
+    skill.bombCost = 2;
+    AIEngine ai(PlayerId::Black, AIConfig{}, skill, 1);
     ViewSpec spec{{"", "", "", "", "", "", "", "..OOOO..."}};
     spec.skill = SkillId::Bomb;
     spec.energy = 1;  // 能下子，但不夠用炸彈（2 格）
@@ -450,10 +452,12 @@ TEST(AIDecisionTest, A5b_SX3_UsedDestroyIsNotTriedAgain) {
 }
 
 TEST(AIDecisionTest, A5b_DestroyNeedsEnergy) {
-    AIEngine ai = engine();
+    SkillConfig skill;
+    skill.destroyCost = 3;
+    AIEngine ai(PlayerId::Black, AIConfig{}, skill, 1);
     ViewSpec spec = rowSpec("..OOOO...");
     spec.skill = SkillId::Destroy;
-    spec.energy = 2;
+    spec.energy = 2;  // 能下子，但不夠用摧毀（3 格）
     EXPECT_TRUE(placedIn(ai.decide(viewOf(spec)), cells({{1, 7}, {6, 7}})));
 }
 
@@ -495,7 +499,9 @@ TEST(AIDecisionTest, A8a_A5a_OpenFourPointsInZoneDoNotCount) {
 }
 
 TEST(AIDecisionTest, A8a_NeedsEnergyForDominate) {
-    AIEngine ai = engine();
+    SkillConfig skill;
+    skill.dominateCost = 3;
+    AIEngine ai(PlayerId::Black, AIConfig{}, skill, 1);
     ViewSpec spec = rowSpec("...XXX...");
     spec.dominateCharges = 0;
     spec.energy = 2;  // 不夠用霸道 → 照 A6 做活四
@@ -601,8 +607,11 @@ TEST(AIDecisionTest, A8b_NeedsEnergyToSpare) {
     AIEngine ai = engine();
     ViewSpec spec{{"", "", "..O.O", "", "..O"}};
     spec.skill = SkillId::Destroy;
-    spec.energy = 3;
+    spec.energy = 1;  // 夠用摧毀（1 格），但用完不能下子
     EXPECT_FALSE(usedSkill(ai.decide(viewOf(spec)), SkillId::Destroy));
+    spec.now += kReaction;
+    spec.energy = 2;
+    EXPECT_TRUE(usedSkill(ai.decide(viewOf(spec)), SkillId::Destroy));
 }
 
 TEST(AIDecisionTest, A8b_SX3_NotUsedAfterDestroyUsed) {
@@ -621,7 +630,7 @@ TEST(AIDecisionTest, A9a_KeepsEnoughEnergyForOwnSkill) {
         int holdAt;   // 這個能量時不下子
         int placeAt;  // 這個能量時下子
     };
-    for (const Case& c : {Case{SkillId::Bomb, 2, 3}, Case{SkillId::Dominate, 3, 4}, Case{SkillId::Destroy, 3, 4}}) {
+    for (const Case& c : {Case{SkillId::Bomb, 1, 2}, Case{SkillId::Dominate, 1, 2}, Case{SkillId::Destroy, 1, 2}}) {
         AIEngine ai = engine();
         ViewSpec spec = rowSpec(".....X...");
         spec.skill = c.skill;
@@ -768,12 +777,12 @@ TEST(AIDecisionTest, A2a_ChooseSkillReproducibleWithSeed) {
     }
 }
 
-TEST(AIDecisionTest, A2a_ChooseSkillUsesAllThreeSkills) {
+TEST(AIDecisionTest, A2a_S1b_ChooseSkillUsesOpenSkillsOnly) {
     std::set<SkillId> seen;
     for (std::uint32_t seed = 0; seed < 30; ++seed) {
         seen.insert(engine(seed).chooseSkill());
     }
-    EXPECT_EQ(seen.size(), 3u);
+    EXPECT_EQ(seen, (std::set<SkillId>{SkillId::Dominate, SkillId::Destroy}));  // 炸彈暫停使用
 }
 
 // ---- A3、E5：只吃得到 PlayerView ----

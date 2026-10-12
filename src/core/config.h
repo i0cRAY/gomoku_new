@@ -7,9 +7,9 @@
 // 所有數值集中在這裡（design §3.1）
 
 struct SkillConfig {
-    int bombCost = 2;             // spec S2：各技能的能量消耗，沒有冷卻
-    int dominateCost = 3;
-    int destroyCost = 3;
+    int bombCost = 1;             // spec S2：各技能的能量消耗，沒有冷卻（目前三項都是 1）⚠️待確認
+    int dominateCost = 1;
+    int destroyCost = 1;
     int bombSize = 2;             // spec SB3：以目標為左上角的 2×2
     int dominateStones = 3;       // spec SZ1
     TimeMs zoneDuration = 3000;   // spec SZ2

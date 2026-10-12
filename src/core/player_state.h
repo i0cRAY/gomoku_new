@@ -9,7 +9,7 @@ struct PlayerState {
     int energy = 0;
     TimeMs regenProgress = 0;                 // E2–E4
     std::optional<TimeMs> lastPlaceTime;      // P1-4、P4
-    SkillId skill = SkillId::Bomb;            // 開局前選的技能，S1
+    SkillId skill = SkillId::Dominate;        // 開局前選的技能，S1（炸彈暫停使用，S1b）
     int dominateCharges = 0;                  // 霸道剩餘次數，SZ1–SZ2（不公開）
     bool destroyUsed = false;                 // 摧毀已用過，SX3
     int score = 0;                            // W1、W2（公開，也會複製到 PlayerView::scores）

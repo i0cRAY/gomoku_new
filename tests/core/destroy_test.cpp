@@ -40,10 +40,10 @@ protected:
     PlayerState state;
 };
 
-TEST_F(DestroyTest, S3_NeedsThreeEnergy) {
+TEST_F(DestroyTest, S3_NeedsItsCost) {
     EXPECT_FALSE(state.destroyUsed);
     EXPECT_EQ(skills.check(destroyAt(Pos{7, 7}), state, board), std::nullopt);
-    state.energy = 2;
+    state.energy = SkillConfig{}.destroyCost - 1;
     EXPECT_EQ(skills.check(destroyAt(Pos{7, 7}), state, board), RejectReason::NoEnergy);
 }
 

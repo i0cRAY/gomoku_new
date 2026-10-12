@@ -141,7 +141,7 @@ AIEngine::AIEngine(PlayerId self, const AIConfig& ai, const SkillConfig& skill, 
       destroyMinGain(ai.destroyMinGain) {}
 
 SkillId AIEngine::chooseSkill() {
-    constexpr SkillId kSkills[] = {SkillId::Bomb, SkillId::Dominate, SkillId::Destroy};  // A2a
+    constexpr SkillId kSkills[] = {SkillId::Dominate, SkillId::Destroy};  // A2a；炸彈暫停使用（S1b）
     std::uniform_int_distribution<std::size_t> pick(0, std::size(kSkills) - 1);
     return kSkills[pick(rng)];
 }

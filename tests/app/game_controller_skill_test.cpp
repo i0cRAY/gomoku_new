@@ -127,7 +127,7 @@ TEST_F(SkillFlowTest, S1_E5_OpponentSkillHiddenUntilUsed) {
     EXPECT_EQ(controller.viewFor(PlayerId::Black).opponentSkillRevealed, std::nullopt);
 }
 
-// 開局能量 1、T = 2000：時間 4000 時回到 3 格，剛好夠用一次霸道或摧毀（S2）
+// 開局能量 1、T = 2000：時間 4000 時回到 3 格（技能消耗 1 格，S2）
 constexpr TimeMs kThreeEnergy = 4000;
 
 TEST_F(SkillFlowTest, S1_OpponentSkillRevealedAfterFirstUse) {
@@ -139,29 +139,30 @@ TEST_F(SkillFlowTest, S1_OpponentSkillRevealedAfterFirstUse) {
 
 TEST_F(SkillFlowTest, S1_RejectedUseDoesNotReveal) {
     start(SkillId::Dominate, SkillId::Bomb);
+    ASSERT_TRUE(controller.submit(PlaceAction{PlayerId::Black, {0, 0}}, 0).accepted);  // 能量 1 → 0
     EXPECT_FALSE(controller.submit(useSkill(PlayerId::Black, SkillId::Dominate), 1000).accepted);
     EXPECT_EQ(controller.viewFor(PlayerId::White).opponentSkillRevealed, std::nullopt);
 }
 
 // ---- 透過 submit 使用技能 ----
 
-TEST_F(SkillFlowTest, S3_RejectedWithoutThreeEnergy) {
+TEST_F(SkillFlowTest, S3_RejectedWithoutEnergy) {
     start(SkillId::Dominate, SkillId::Bomb);
-    EXPECT_EQ(controller.submit(useSkill(PlayerId::Black, SkillId::Dominate), kThreeEnergy - 1).reason,
-              RejectReason::NoEnergy);
+    ASSERT_TRUE(controller.submit(PlaceAction{PlayerId::Black, {0, 0}}, 0).accepted);  // 能量 1 → 0
+    EXPECT_EQ(controller.submit(useSkill(PlayerId::Black, SkillId::Dominate), 1999).reason, RejectReason::NoEnergy);
     ASSERT_FALSE(rejections.empty());
     EXPECT_EQ(rejections.back(), RejectReason::NoEnergy);
-    EXPECT_EQ(controller.viewFor(PlayerId::Black).self.energy, 2);  // P3：不扣能量
+    EXPECT_EQ(controller.viewFor(PlayerId::Black).self.energy, 0);  // P3：不扣能量
 }
 
-TEST_F(SkillFlowTest, S2_SkillCostsThreeEnergy) {
+TEST_F(SkillFlowTest, S2_SkillCostsOneEnergy) {
     start(SkillId::Dominate, SkillId::Bomb);
     controller.tick(kThreeEnergy + 1000);  // 能量 3，進度 1000
     const int changesBefore = stateChangedCount;
     ASSERT_TRUE(controller.submit(useSkill(PlayerId::Black, SkillId::Dominate), kThreeEnergy + 1000).accepted);
     EXPECT_EQ(stateChangedCount, changesBefore + 1);
     const PlayerView view = controller.viewFor(PlayerId::Black);
-    EXPECT_EQ(view.self.energy, 0);
+    EXPECT_EQ(view.self.energy, 2);
     EXPECT_DOUBLE_EQ(view.nextEnergyRatio, 0.5);  // E6：進度不變
     EXPECT_EQ(controller.viewFor(PlayerId::White).self.energy, 3);  // 白方不受影響
 }
@@ -169,10 +170,10 @@ TEST_F(SkillFlowTest, S2_SkillCostsThreeEnergy) {
 TEST_F(SkillFlowTest, S3_NoCooldownUsableAgainWithEnergy) {
     start(SkillId::Dominate, SkillId::Bomb);
     controller.tick(20000);  // 能量滿 10
-    ASSERT_TRUE(controller.submit(useSkill(PlayerId::Black, SkillId::Dominate), 20000).accepted);
-    ASSERT_TRUE(controller.submit(useSkill(PlayerId::Black, SkillId::Dominate), 20000).accepted);
-    ASSERT_TRUE(controller.submit(useSkill(PlayerId::Black, SkillId::Dominate), 20000).accepted);
-    EXPECT_EQ(controller.viewFor(PlayerId::Black).self.energy, 1);
+    for (int i = 0; i < 10; ++i) {
+        ASSERT_TRUE(controller.submit(useSkill(PlayerId::Black, SkillId::Dominate), 20000).accepted) << i;
+    }
+    EXPECT_EQ(controller.viewFor(PlayerId::Black).self.energy, 0);
     EXPECT_EQ(controller.submit(useSkill(PlayerId::Black, SkillId::Dominate), 20000).reason, RejectReason::NoEnergy);
 }
 
@@ -192,10 +193,10 @@ TEST_F(SkillFlowTest, S5_SkillKeepsPlaceInterval) {
     EXPECT_EQ(controller.submit(PlaceAction{PlayerId::Black, {1, 0}}, 8499).reason, RejectReason::PlaceCooldown);
 }
 
-// 開局能量 1、T = 2000：時間 2000 時回到 2 格，剛好夠用一次炸彈（S2）
+// 開局能量 1、T = 2000：時間 2000 時回到 2 格（S2）
 constexpr TimeMs kTwoEnergy = 2000;
 
-TEST_F(SkillFlowTest, SB3_S2_BombClearsAreaAndCostsTwo) {
+TEST_F(SkillFlowTest, SB3_S2_BombClearsAreaAndCostsEnergy) {
     start(SkillId::Dominate, SkillId::Bomb);
     ASSERT_TRUE(controller.submit(PlaceAction{PlayerId::Black, {7, 7}}, 0).accepted);
     ASSERT_TRUE(controller.submit(PlaceAction{PlayerId::White, {8, 8}}, 0).accepted);  // 白方能量 1 → 0
@@ -203,7 +204,7 @@ TEST_F(SkillFlowTest, SB3_S2_BombClearsAreaAndCostsTwo) {
     const PlayerView view = controller.viewFor(PlayerId::White);
     EXPECT_TRUE(view.board.isEmpty({7, 7}));  // 對手的子
     EXPECT_TRUE(view.board.isEmpty({8, 8}));  // 自己的子也被清掉
-    EXPECT_EQ(view.self.energy, 0);           // 2 − 2
+    EXPECT_EQ(view.self.energy, 1);           // 2 − 1
     EXPECT_TRUE(controller.submit(PlaceAction{PlayerId::Black, {7, 7}}, 2 * kTwoEnergy).accepted);  // 可以立刻再下
 }
 

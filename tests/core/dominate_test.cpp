@@ -89,10 +89,10 @@ protected:
     PlayerState state;
 };
 
-TEST_F(DominateTest, S3_NeedsThreeEnergy) {
+TEST_F(DominateTest, S3_NeedsItsCost) {
     EXPECT_EQ(state.dominateCharges, 0);
     EXPECT_EQ(skills.check(dominate(), state, board), std::nullopt);
-    state.energy = 2;
+    state.energy = SkillConfig{}.dominateCost - 1;
     EXPECT_EQ(skills.check(dominate(), state, board), RejectReason::NoEnergy);
 }
 

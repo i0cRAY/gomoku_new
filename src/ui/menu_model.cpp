@@ -60,7 +60,7 @@ std::string matchModeLabel(MatchMode mode) {
 }
 
 std::vector<SkillId> skillOptions() {
-    return {SkillId::Bomb, SkillId::Dominate, SkillId::Destroy};
+    return {SkillId::Dominate, SkillId::Destroy};  // S1b：炸彈暫停使用
 }
 
 std::string skillDescription(SkillId skill, const SkillConfig& config) {

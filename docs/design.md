@@ -134,9 +134,9 @@ struct ZoneCell {
 
 ```cpp
 struct SkillConfig {
-    int bombCost = 2;                    // spec S2：各技能的能量消耗，沒有冷卻
-    int dominateCost = 3;
-    int destroyCost = 3;
+    int bombCost = 1;                    // spec S2：各技能的能量消耗，沒有冷卻（目前三項都是 1）
+    int dominateCost = 1;
+    int destroyCost = 1;
     int bombSize = 2;                    // spec SB3：以目標為左上角的 2×2
     int dominateStones = 3;              // spec SZ1
     TimeMs zoneDuration = 3000;          // spec SZ2
@@ -375,7 +375,7 @@ enum class Pattern { Five, OpenFour, Four, OpenThree, Three, OpenTwo, Two, None 
 class AIEngine {
 public:
     AIEngine(PlayerId self, const AIConfig&, const SkillConfig&, std::uint32_t seed);
-    SkillId chooseSkill();   // 技能選擇階段呼叫，用同一個 seed 的亂數從三項中隨機選（spec A2a）
+    SkillId chooseSkill();   // 技能選擇階段呼叫，用同一個 seed 的亂數從開放的技能（霸道、摧毀）中隨機選（spec A2a、S1b）
     // 反應時間未到，或判斷本次不行動時，回傳 nullopt
     // 只拿得到自己的 PlayerView，讀不到對手的不公開資訊（spec A3、E5）；禁區從 view.zones 讀
     // 下子間隔是否已過從 view.placeCooldownRemaining 判斷
@@ -403,20 +403,20 @@ Ready -->|是| Win{"A4 自己<br/>一步成五？"}
 Win -->|是| Place
 Win -->|否| Threat{"A5 對手有<br/>成五點？"}
 Threat -->|"1 個且能下子"| Place
-Threat -->|"擋不完或不能下子"| Bomb{"選了炸彈且<br/>能量 ≥ 2？"}
+Threat -->|"擋不完或不能下子"| Bomb{"選了炸彈且<br/>能量 ≥ 1？<br/>（炸彈暫停使用）"}
 Bomb -->|是| UseBomb["A5c 炸彈<br/>（2×2 涵蓋威脅棋子）"]
-Bomb -->|否| Destroy{"選了摧毀、能量 ≥ 3<br/>且還沒用過？"}
+Bomb -->|否| Destroy{"選了摧毀、能量 ≥ 1<br/>且還沒用過？"}
 Destroy -->|是| UseDestroy["A5b／A8b 摧毀<br/>（對手子 − 己方子 最多）"]
 Destroy -->|"否，擋不完"| BlockOne["擋威脅分降最多的<br/>那個成五點"]
 Destroy -->|"否，不能下子"| End
 BlockOne --> Place
-Threat -->|否| Dom{"A8a 選了霸道、次數為 0、<br/>能量 ≥ 3 且自己有活三以上？"}
+Threat -->|否| Dom{"A8a 選了霸道、次數為 0、<br/>能量 ≥ 1 且自己有活三以上？"}
 Dom -->|是| UseDom[使用霸道]
 Dom -->|否| Four{"A6 自己能<br/>做活四？"}
 Four -->|是| Place
 Four -->|否| Three{"A7 對手<br/>有活三？"}
 Three -->|是| Place
-Three -->|否| Gain{"A8b 選了摧毀、沒用過、能量 ≥ 4<br/>且最佳差值 ≥ 3？"}
+Three -->|否| Gain{"A8b 選了摧毀、沒用過、能量 ≥ 2<br/>且最佳差值 ≥ 3？"}
 Gain -->|是| UseDestroy
 Gain -->|否| Reserve{"A9a 下子後能量<br/>≥ 技能消耗？"}
 Reserve -->|"否（摧毀已用過除外）"| End
@@ -561,7 +561,7 @@ gomoku-rt/
 |AI 用單純評分還是 minimax + α-β 剪枝？|規則優先 + 評分|即時制沒有太多時間慢慢搜尋|
 |AI 要不要分難度？|不分，固定反應時間 350 ms|原本難度只影響反應時間，統一成最強的一種，少一個設定也少一組測試|
 |連五後結束，還是消除並計分？|消除並計分|即時制下一條連五就結束太快；消除後棋盤會空出來，對局可以持續，搭配限時或達分決定勝負|
-|技能用冷卻還是耗能量？|耗能量（炸彈 2 格，霸道、摧毀 3 格），沒有冷卻|技能和下子搶同一份資源，要在「多下幾子」和「放技能」之間取捨；也少了一套冷卻計時|
+|技能用冷卻還是耗能量？|耗能量（目前三項都是 1 格；炸彈暫停使用），沒有冷卻|技能和下子搶同一份資源，要在「多下幾子」和「放技能」之間取捨；也少了一套冷卻計時|
 |禁區要不要公開？|公開|禁區直接影響對手能不能下，看不到只會讓對手一直被拒絕；霸道剩餘次數則不公開，保留心理戰|
 |回能用固定 tick 加總還是懶惰計算？|懶惰計算（每次 `advance(from, to)`）|結果與 tick 頻率無關，測試可以精確重現|
 |加入方要不要先預測畫面？|不預測，等主機快照|區網延遲很低，預測帶來的同步問題比延遲更麻煩|

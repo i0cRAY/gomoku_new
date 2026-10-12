@@ -19,7 +19,7 @@ std::vector<TimeMs> timeLimitOptions();         // G1b：5、3、1 分鐘
 std::size_t defaultTimeLimitIndex();
 std::string timeLimitLabel(TimeMs);
 std::string matchModeLabel(MatchMode);
-std::vector<SkillId> skillOptions();            // U7：四項技能，依顯示順序
+std::vector<SkillId> skillOptions();            // U7：開放的技能，依顯示順序（炸彈暫停使用，S1b）
 std::string skillDescription(SkillId, const SkillConfig&);  // U7：效果說明與冷卻時間
 std::string countdownText(TimeMs remaining);    // G2：3、2、1
 std::string resultText(GameStatus);             // U6：勝方或和局；未結束時為空字串

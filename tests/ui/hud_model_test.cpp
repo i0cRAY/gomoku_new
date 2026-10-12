@@ -114,25 +114,24 @@ TEST(HudModelTest, U2_SX3_DestroyUsedText) {
 }
 
 TEST(HudModelTest, U2_S3_SkillAvailabilityDependsOnEnergy) {
-    PlayerView v = viewWith(1, 0.0);
-    v.self.skill = SkillId::Bomb;
-    EXPECT_FALSE(isSkillAvailable(v, SkillConfig{}));
-    v.self.energy = 2;  // 炸彈 2 格就夠
-    EXPECT_TRUE(isSkillAvailable(v, SkillConfig{}));
+    PlayerView v = viewWith(0, 0.0);
     v.self.skill = SkillId::Dominate;
-    EXPECT_FALSE(isSkillAvailable(v, SkillConfig{}));  // 霸道要 3 格
-    v.self.energy = 3;
+    EXPECT_FALSE(isSkillAvailable(v, SkillConfig{}));
+    v.self.energy = 1;  // 消耗 1 格
     EXPECT_TRUE(isSkillAvailable(v, SkillConfig{}));
+    SkillConfig custom;
+    custom.dominateCost = 3;  // 消耗取自設定
+    EXPECT_FALSE(isSkillAvailable(v, custom));
 }
 
 TEST(HudModelTest, U2_S3_SkillStatusText) {
-    const SkillConfig config;
-    PlayerView v = viewWith(1, 0.0);
-    v.self.skill = SkillId::Bomb;
-    EXPECT_EQ(skillStatusText(v, config), "能量不足（需要 2 格）");
-    v.self.energy = 2;
-    EXPECT_EQ(skillStatusText(v, config), "可使用（消耗 2 格）");
+    SkillConfig config;
+    PlayerView v = viewWith(0, 0.0);
     v.self.skill = SkillId::Dominate;
+    EXPECT_EQ(skillStatusText(v, config), "能量不足（需要 1 格）");
+    v.self.energy = 1;
+    EXPECT_EQ(skillStatusText(v, config), "可使用（消耗 1 格）");
+    config.dominateCost = 3;  // 文字依技能的消耗顯示
     EXPECT_EQ(skillStatusText(v, config), "能量不足（需要 3 格）");
     v.self.energy = 4;
     EXPECT_EQ(skillStatusText(v, config), "可使用（消耗 3 格）");

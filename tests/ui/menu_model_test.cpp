@@ -35,7 +35,7 @@ TEST(MenuModelTest, U7_SB3_BombDescriptionShowsAreaAndCost) {
     const std::string text = skillDescription(SkillId::Bomb, SkillConfig{});
     EXPECT_NE(text.find("2×2"), std::string::npos);
     EXPECT_NE(text.find("雙方"), std::string::npos);
-    EXPECT_NE(text.find("消耗 2 格能量"), std::string::npos);
+    EXPECT_NE(text.find("消耗 1 格能量"), std::string::npos);
     EXPECT_EQ(text.find("冷卻"), std::string::npos);
 }
 
@@ -111,26 +111,25 @@ TEST(MenuModelTest, U6_FinalResultTextIncludesScores) {
     EXPECT_EQ(finalResultText(GameStatus::Running, {1, 2}), "");
 }
 
-// ---- U7：四項技能 ----
+// ---- U7、S1b：開放的技能（炸彈暫停使用）----
 
-TEST(MenuModelTest, U7_SkillOptionsListAllThree) {
+TEST(MenuModelTest, U7_S1b_SkillOptionsExcludeBomb) {
     const auto skills = skillOptions();
-    ASSERT_EQ(skills.size(), 3u);
-    EXPECT_EQ(skills[0], SkillId::Bomb);
-    EXPECT_EQ(skills[1], SkillId::Dominate);
-    EXPECT_EQ(skills[2], SkillId::Destroy);
+    ASSERT_EQ(skills.size(), 2u);
+    EXPECT_EQ(skills[0], SkillId::Dominate);
+    EXPECT_EQ(skills[1], SkillId::Destroy);
 }
 
 TEST(MenuModelTest, U7_DominateDescription) {
     const std::string text = skillDescription(SkillId::Dominate, SkillConfig{});
     EXPECT_NE(text.find("3 顆"), std::string::npos);
     EXPECT_NE(text.find("3 秒"), std::string::npos);
-    EXPECT_NE(text.find("消耗 3 格能量"), std::string::npos);
+    EXPECT_NE(text.find("消耗 1 格能量"), std::string::npos);
 }
 
 TEST(MenuModelTest, U7_DestroyDescriptionMentionsOncePerGame) {
     const std::string text = skillDescription(SkillId::Destroy, SkillConfig{});
     EXPECT_NE(text.find("5×5"), std::string::npos);
     EXPECT_NE(text.find("每局一次"), std::string::npos);
-    EXPECT_NE(text.find("消耗 3 格能量"), std::string::npos);
+    EXPECT_NE(text.find("消耗 1 格能量"), std::string::npos);
 }

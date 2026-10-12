@@ -35,10 +35,10 @@ protected:
     ZoneMap zones;
 };
 
-TEST_F(SkillTest, S2_CostDependsOnSkill) {
-    EXPECT_EQ(config.costOf(SkillId::Bomb), 2);
-    EXPECT_EQ(config.costOf(SkillId::Dominate), 3);
-    EXPECT_EQ(config.costOf(SkillId::Destroy), 3);
+TEST_F(SkillTest, S2_AllSkillsCostOne) {
+    EXPECT_EQ(config.costOf(SkillId::Bomb), 1);
+    EXPECT_EQ(config.costOf(SkillId::Dominate), 1);
+    EXPECT_EQ(config.costOf(SkillId::Destroy), 1);
 }
 
 TEST_F(SkillTest, S2_CostOfFollowsConfig) {
@@ -58,7 +58,7 @@ TEST_F(SkillTest, S3_NoCooldownUsableAtMatchStartWithEnoughEnergy) {
 }
 
 TEST_F(SkillTest, S3_RejectedWithoutEnoughEnergy) {
-    PlayerState state = playerWith(SkillId::Dominate, 2);
+    PlayerState state = playerWith(SkillId::Dominate, 0);
     skills.initPlayer(state);
     EXPECT_EQ(skills.check(dominate(), state, board), RejectReason::NoEnergy);
 }
@@ -170,10 +170,10 @@ TEST_F(BombTest, SB1_AnyCellOnBoardIsValidTarget) {
     EXPECT_EQ(skills.check(bombAt({9, 9}), bomber, board), std::nullopt);  // 已摧毀的格子
 }
 
-TEST_F(BombTest, S3_BombNeedsTwoEnergy) {
-    bomber.energy = 1;
+TEST_F(BombTest, S3_BombNeedsItsCost) {
+    bomber.energy = config.bombCost - 1;
     EXPECT_EQ(skills.check(bombAt({3, 3}), bomber, board), RejectReason::NoEnergy);
-    bomber.energy = 2;
+    bomber.energy = config.bombCost;
     EXPECT_EQ(skills.check(bombAt({3, 3}), bomber, board), std::nullopt);
 }
 
@@ -204,6 +204,6 @@ TEST_F(BombTest, SB4_SB5_MissingTargetCheckedWhereOutOfBoardIs) {
 }
 
 TEST_F(BombTest, SB4_EnergyIsLastCheck) {
-    bomber.energy = 1;
+    bomber.energy = 0;
     EXPECT_EQ(skills.check(bombAt({0, 0}), bomber, board), RejectReason::NoEnergy);
 }
