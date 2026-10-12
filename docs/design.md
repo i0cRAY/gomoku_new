@@ -147,6 +147,7 @@ struct SkillConfig {
 struct AIConfig {
     TimeMs reactionTime = 350;           // spec A2，不分難度
     double defenseWeight = 0.8;          // spec A10
+    int destroyMinGain = 3;              // spec A8b：主動摧毀的最低「對手子 − 己方子」
 };
 
 struct MatchConfig {
@@ -390,7 +391,7 @@ AIEngine 只回傳「想做的動作」，由 GameController 的 `tick` 呼叫�
 
 所有「下在某格」的候選都先排除對手的禁區（spec A5a），流程圖不另外畫出。
 
-AI 決策流程（對應 spec A4–A9）：
+AI 決策流程（對應 spec A4–A9a，順序 A4 → A5 → A8a → A6 → A7 → A8b → A9）：
 
 ```mermaid
 %%{init: {"flowchart": {"useMaxWidth": true}, "themeVariables": {"fontSize": "12px"}}}%%
@@ -405,17 +406,21 @@ Threat -->|"1 個且能下子"| Place
 Threat -->|"擋不完或不能下子"| Bomb{"選了炸彈且<br/>能量 ≥ 2？"}
 Bomb -->|是| UseBomb["A5c 炸彈<br/>（2×2 涵蓋威脅棋子）"]
 Bomb -->|否| Destroy{"選了摧毀、能量 ≥ 3<br/>且還沒用過？"}
-Destroy -->|是| UseDestroy["A5b 摧毀<br/>（對手子 − 己方子 最多）"]
+Destroy -->|是| UseDestroy["A5b／A8b 摧毀<br/>（對手子 − 己方子 最多）"]
 Destroy -->|"否，擋不完"| BlockOne["擋威脅分降最多的<br/>那個成五點"]
 Destroy -->|"否，不能下子"| End
 BlockOne --> Place
-Threat -->|否| Four{"A6 自己能<br/>做活四？"}
+Threat -->|否| Dom{"A8a 選了霸道、次數為 0、<br/>能量 ≥ 3 且自己有活三以上？"}
+Dom -->|是| UseDom[使用霸道]
+Dom -->|否| Four{"A6 自己能<br/>做活四？"}
 Four -->|是| Place
 Four -->|否| Three{"A7 對手<br/>有活三？"}
 Three -->|是| Place
-Three -->|否| Dom{"A8a 選了霸道、次數為 0<br/>且能量 ≥ 4？"}
-Dom -->|是| UseDom[使用霸道]
-Dom -->|否| Eval["A9 / A10 全盤評分<br/>選最高分"]
+Three -->|否| Gain{"A8b 選了摧毀、沒用過、能量 ≥ 4<br/>且最佳差值 ≥ 3？"}
+Gain -->|是| UseDestroy
+Gain -->|否| Reserve{"A9a 下子後能量<br/>≥ 技能消耗？"}
+Reserve -->|"否（摧毀已用過除外）"| End
+Reserve -->|是| Eval["A9 / A10 全盤評分<br/>選最高分"]
 Eval --> Place
 Place -->|是| Send["回傳 Action<br/>交給 GameController::submit"]
 Place -->|否| End

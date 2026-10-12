@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <set>
 #include <utility>
 #include <variant>
@@ -17,10 +18,10 @@ constexpr TimeMs kReaction = 350;  // spec A2：固定反應時間
 struct ViewSpec {
     std::vector<std::string_view> rows;
     SkillId skill = SkillId::Dominate;
-    int energy = 3;  // 夠用技能（S2），但不到使用霸道的 4（A8a）
+    int energy = 4;  // A9a：選霸道（消耗 3）時，下子後還留 3 格，可以照常下子
     TimeMs cooldownRemaining = 0;  // 0：下子間隔已過
     std::vector<Pos> zones = {};   // 對手（白）的禁區，尚未到期
-    int dominateCharges = 0;
+    int dominateCharges = 3;  // 次數還沒用完，不觸發 A8a；要測霸道時設為 0
     bool destroyUsed = false;
     TimeMs now = 30000;
 };
@@ -456,8 +457,8 @@ TEST(AIDecisionTest, A5b_DestroyNeedsEnergy) {
     EXPECT_TRUE(placedIn(ai.decide(viewOf(spec)), cells({{1, 7}, {6, 7}})));
 }
 
-TEST(AIDecisionTest, A5b_DestroyOnlyUsedForA5) {
-    for (std::string_view row : {"...OOO...", ".....X...", "...XXX..."}) {  // A7、A9、A6
+TEST(AIDecisionTest, A5b_A8b_DestroyNotUsedWithoutThreatOrGain) {
+    for (std::string_view row : {"...OOO...", ".....X...", "...XXX..."}) {  // A7 優先、A9 差值不夠、A6 優先
         AIEngine ai = engine();
         ViewSpec spec = rowSpec(row);
         spec.skill = SkillId::Destroy;
@@ -467,56 +468,187 @@ TEST(AIDecisionTest, A5b_DestroyOnlyUsedForA5) {
     }
 }
 
-// ---- A8a：霸道 ----
+// ---- A8a：霸道（自己有活三以上時，排在 A6 之前）----
 
-TEST(AIDecisionTest, A8a_UsesDominateWithNoChargesAndEnoughEnergy) {
+TEST(AIDecisionTest, A8a_UsesDominateWhenOwnOpenThree) {
     AIEngine ai = engine();
-    ViewSpec spec = rowSpec(".....X...");
-    spec.energy = 4;
-    EXPECT_TRUE(usedSkill(ai.decide(viewOf(spec)), SkillId::Dominate));
+    ViewSpec spec = rowSpec("...XXX...");
+    spec.dominateCharges = 0;
+    EXPECT_TRUE(usedSkill(ai.decide(viewOf(spec)), SkillId::Dominate));  // 先開霸道，不先做活四
 }
 
-TEST(AIDecisionTest, A8a_NeedsEnergyToSpareForAPlacement) {
+TEST(AIDecisionTest, A8a_NotUsedWithoutOwnOpenThree) {
     AIEngine ai = engine();
-    ViewSpec spec = rowSpec(".....X...");
-    spec.energy = 3;  // 夠用霸道，但用完就不能馬上下子
+    ViewSpec spec = rowSpec("....XX...");  // 只有活二
+    spec.dominateCharges = 0;
+    spec.energy = 10;
     EXPECT_TRUE(placedAt(ai.decide(viewOf(spec))).has_value());
+}
+
+TEST(AIDecisionTest, A8a_A5a_OpenFourPointsInZoneDoNotCount) {
+    AIEngine ai = engine();
+    ViewSpec spec = rowSpec("...XXX...");
+    spec.dominateCharges = 0;
+    spec.energy = 10;
+    spec.zones = {{2, 7}, {6, 7}};  // 做活四的兩點都在對手禁區內
+    EXPECT_FALSE(usedSkill(ai.decide(viewOf(spec)), SkillId::Dominate));
+}
+
+TEST(AIDecisionTest, A8a_NeedsEnergyForDominate) {
+    AIEngine ai = engine();
+    ViewSpec spec = rowSpec("...XXX...");
+    spec.dominateCharges = 0;
+    spec.energy = 2;  // 不夠用霸道 → 照 A6 做活四
+    EXPECT_TRUE(placedIn(ai.decide(viewOf(spec)), cells({{2, 7}, {6, 7}})));
+    spec.now += kReaction;
+    spec.energy = 3;  // 剛好夠用，不必留 1 格
+    EXPECT_TRUE(usedSkill(ai.decide(viewOf(spec)), SkillId::Dominate));
 }
 
 TEST(AIDecisionTest, A8a_NotUsedWhileChargesRemain) {
     AIEngine ai = engine();
-    ViewSpec spec = rowSpec(".....X...");
+    ViewSpec spec = rowSpec("...XXX...");
     spec.energy = 10;
     spec.dominateCharges = 1;
-    EXPECT_TRUE(placedAt(ai.decide(viewOf(spec))).has_value());
+    EXPECT_TRUE(placedIn(ai.decide(viewOf(spec)), cells({{2, 7}, {6, 7}})));
 }
 
 TEST(AIDecisionTest, A8a_EnergyThresholdFollowsSkillCost) {
     SkillConfig skill;
     skill.dominateCost = 5;
     AIEngine ai(PlayerId::Black, AIConfig{}, skill, 1);
-    ViewSpec spec = rowSpec(".....X...");
-    spec.energy = 5;
+    ViewSpec spec = rowSpec("...XXX...");
+    spec.dominateCharges = 0;
+    spec.energy = 4;
     EXPECT_TRUE(placedAt(ai.decide(viewOf(spec))).has_value());
     spec.now += kReaction;
-    spec.energy = 6;
+    spec.energy = 5;
     EXPECT_TRUE(usedSkill(ai.decide(viewOf(spec)), SkillId::Dominate));
 }
 
-TEST(AIDecisionTest, A8a_OpenThreeBlockComesFirst) {
+TEST(AIDecisionTest, A8a_OpponentFivePointComesFirst) {
     AIEngine ai = engine();
-    ViewSpec spec = rowSpec("...OOO...");
+    ViewSpec spec{{"", "", "", "", "", "...XXX...", "", ".XOOOO..."}};
+    spec.dominateCharges = 0;
     spec.energy = 10;
-    EXPECT_TRUE(placedIn(ai.decide(viewOf(spec)), cells({{2, 7}, {6, 7}})));
+    EXPECT_EQ(placedAt(ai.decide(viewOf(spec))), std::optional<Pos>(Pos{6, 7}));  // A5 先擋
 }
 
 TEST(AIDecisionTest, A8a_UsedEvenIfCannotPlace) {
     // 使用技能不受下子間隔影響（S5）
     AIEngine ai = engine();
-    ViewSpec spec = rowSpec(".....X...");
-    spec.energy = 4;
+    ViewSpec spec = rowSpec("...XXX...");
+    spec.dominateCharges = 0;
     spec.cooldownRemaining = 300;
     EXPECT_TRUE(usedSkill(ai.decide(viewOf(spec)), SkillId::Dominate));
+}
+
+// ---- A5、A7：衝四與活三一律擋，不用炸彈 ----
+
+TEST(AIDecisionTest, A5_BombOwnerBlocksSingleFourInsteadOfBombing) {
+    AIEngine ai = engine();
+    ViewSpec spec = rowSpec(".XOOOO...");
+    spec.skill = SkillId::Bomb;
+    spec.energy = 10;
+    EXPECT_EQ(placedAt(ai.decide(viewOf(spec))), std::optional<Pos>(Pos{6, 7}));
+}
+
+TEST(AIDecisionTest, A7_BombOwnerBlocksOpenThreeInsteadOfBombing) {
+    for (std::string_view row : {"...OOO...", "..OO.O..."}) {
+        AIEngine ai = engine();
+        ViewSpec spec = rowSpec(row);
+        spec.skill = SkillId::Bomb;
+        spec.energy = 10;
+        const auto action = ai.decide(viewOf(spec));
+        EXPECT_EQ(skillOf(action), nullptr) << row;
+        EXPECT_TRUE(placedAt(action).has_value()) << row;
+    }
+}
+
+// ---- A8b：主動摧毀 ----
+
+TEST(AIDecisionTest, A8b_DestroysWhenGainReachesThreshold) {
+    // 三顆白子散在 (2,2)(4,2)(2,4)，沒有活三；以 (3,3) 附近為中心可涵蓋 3 顆
+    AIEngine ai = engine();
+    ViewSpec spec{{"", "", "..O.O", "", "..O"}};
+    spec.skill = SkillId::Destroy;
+    const SkillAction* destroy = skillOf(ai.decide(viewOf(spec)));
+    ASSERT_NE(destroy, nullptr);
+    EXPECT_EQ(destroy->skill, SkillId::Destroy);
+    ASSERT_TRUE(destroy->target.has_value());
+    EXPECT_LE(std::abs(destroy->target->x - 3), 1);  // 5×5 要同時涵蓋 x = 2 與 4、y = 2 與 4
+    EXPECT_LE(std::abs(destroy->target->y - 3), 1);
+}
+
+TEST(AIDecisionTest, A8b_NotUsedBelowThreshold) {
+    AIEngine ai = engine();
+    ViewSpec spec{{"", "", "..O.O", "", "..O.X"}};  // 範圍內一顆黑子，差值只剩 2
+    spec.skill = SkillId::Destroy;
+    spec.energy = 10;
+    EXPECT_TRUE(placedAt(ai.decide(viewOf(spec))).has_value());
+}
+
+TEST(AIDecisionTest, A8b_ThresholdComesFromConfig) {
+    AIConfig config;
+    config.destroyMinGain = 4;
+    AIEngine ai(PlayerId::Black, config, SkillConfig{}, 1);
+    ViewSpec spec{{"", "", "..O.O", "", "..O"}};
+    spec.skill = SkillId::Destroy;
+    EXPECT_TRUE(placedAt(ai.decide(viewOf(spec))).has_value());
+}
+
+TEST(AIDecisionTest, A8b_NeedsEnergyToSpare) {
+    AIEngine ai = engine();
+    ViewSpec spec{{"", "", "..O.O", "", "..O"}};
+    spec.skill = SkillId::Destroy;
+    spec.energy = 3;
+    EXPECT_FALSE(usedSkill(ai.decide(viewOf(spec)), SkillId::Destroy));
+}
+
+TEST(AIDecisionTest, A8b_SX3_NotUsedAfterDestroyUsed) {
+    AIEngine ai = engine();
+    ViewSpec spec{{"", "", "..O.O", "", "..O"}};
+    spec.skill = SkillId::Destroy;
+    spec.destroyUsed = true;
+    EXPECT_TRUE(placedAt(ai.decide(viewOf(spec))).has_value());
+}
+
+// ---- A9a：保留能量 ----
+
+TEST(AIDecisionTest, A9a_KeepsEnoughEnergyForOwnSkill) {
+    struct Case {
+        SkillId skill;
+        int holdAt;   // 這個能量時不下子
+        int placeAt;  // 這個能量時下子
+    };
+    for (const Case& c : {Case{SkillId::Bomb, 2, 3}, Case{SkillId::Dominate, 3, 4}, Case{SkillId::Destroy, 3, 4}}) {
+        AIEngine ai = engine();
+        ViewSpec spec = rowSpec(".....X...");
+        spec.skill = c.skill;
+        spec.energy = c.holdAt;
+        EXPECT_EQ(ai.decide(viewOf(spec)), std::nullopt) << static_cast<int>(c.skill);
+        spec.now += kReaction;
+        spec.energy = c.placeAt;
+        EXPECT_TRUE(placedAt(ai.decide(viewOf(spec))).has_value()) << static_cast<int>(c.skill);
+    }
+}
+
+TEST(AIDecisionTest, A9a_NoReserveAfterDestroyUsed) {
+    AIEngine ai = engine();
+    ViewSpec spec = rowSpec(".....X...");
+    spec.skill = SkillId::Destroy;
+    spec.destroyUsed = true;
+    spec.energy = 1;
+    EXPECT_TRUE(placedAt(ai.decide(viewOf(spec))).has_value());
+}
+
+TEST(AIDecisionTest, A9a_UrgentMovesIgnoreReserve) {
+    for (std::string_view row : {".XXXX....", ".XOOOO...", "...XXX...", "...OOO..."}) {  // A4、A5、A6、A7
+        AIEngine ai = engine();
+        ViewSpec spec = rowSpec(row);
+        spec.energy = 1;
+        EXPECT_TRUE(placedAt(ai.decide(viewOf(spec))).has_value()) << row;
+    }
 }
 
 // ---- S1a：每種技能的 AI 只用自己的技能 ----
@@ -563,7 +695,7 @@ TEST(AIDecisionTest, A2_NoActionStillCountsAsDecision) {
     spec.energy = 0;
     EXPECT_EQ(ai.decide(viewOf(spec)), std::nullopt);  // 不行動，但算一次決策
     spec.now = 300;
-    spec.energy = 1;
+    spec.energy = 4;
     EXPECT_EQ(ai.decide(viewOf(spec)), std::nullopt);  // 反應時間未到
     spec.now = kReaction;
     EXPECT_TRUE(ai.decide(viewOf(spec)).has_value());

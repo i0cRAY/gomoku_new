@@ -41,6 +41,7 @@ struct PatternScores {
 struct AIConfig {
     TimeMs reactionTime = 350;   // spec A2，不分難度
     double defenseWeight = 0.8;  // spec A10
+    int destroyMinGain = 3;      // spec A8b：主動摧毀的最低「對手子 − 己方子」⚠️待確認
     PatternScores scores;
 };
 

@@ -48,14 +48,21 @@ private:
     double sideScore(const Board&, Pos, PlayerId) const;
     bool canPlace(const PlayerView&) const;
     bool skillReady(const PlayerView&, SkillId) const;
+    bool skillReadyWithSpare(const PlayerView&, SkillId) const;  // 用完還留 1 格可以下子（A8b）
+    bool keepsReserve(const PlayerView&) const;                   // A9a
     std::vector<Pos> opponentZones(const PlayerView&) const;  // A5a：當下對自己有效的禁區格
     std::vector<Pos> fivePoints(const Board&, PlayerId) const;
     Threat threatOf(const Board&) const;  // 對手的威脅分（spec A5）：成五點數量，再比全盤最高進攻分
     std::optional<Action> respondToFivePoints(const PlayerView&, const std::vector<Pos>& points,
                                               const std::vector<Pos>& zones);
     std::vector<Pos> threatStones(const Board&, const std::vector<Pos>& points) const;  // spec A5 名詞
-    std::optional<Pos> bestBombTarget(const Board&, const std::vector<Pos>& points);  // A5c
-    std::optional<Pos> bestDestroyTarget(const Board&, const std::vector<Pos>& points);  // A5b
+    std::optional<Pos> bestBombTarget(const Board&, const std::vector<Pos>& stones);    // A5c
+    struct AreaChoice {
+        Pos target;
+        int gain;  // 範圍內對手棋子數 − 己方棋子數
+    };
+    // A5b（mustCover 有值時，範圍至少涵蓋其中一顆）、A8b（不限範圍）
+    std::optional<AreaChoice> bestDestroyArea(const Board&, const std::optional<std::vector<Pos>>& mustCover);
     std::optional<Pos> openThreeBlock(const Board&, const std::vector<Pos>& zones) const;  // A7
     std::optional<Pos> highestScore(const Board&, const std::vector<Pos>& candidates) const;
 
@@ -65,5 +72,6 @@ private:
     std::mt19937 rng;
     PatternScores scores;
     SkillConfig skills;  // spec S2 各技能的消耗、SB3 炸彈範圍、SX2 摧毀範圍
+    int destroyMinGain;  // spec A8b
     std::optional<TimeMs> lastDecision;
 };

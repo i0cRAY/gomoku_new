@@ -29,6 +29,13 @@ bool finished(GameStatus s) {
 
 class AIControllerTest : public ::testing::Test {
 protected:
+    // 技能消耗設為 0：AI 不必保留能量（A9a），開局就會下子，方便測接線與出手節奏
+    AIControllerTest() {
+        config.skill.bombCost = 0;
+        config.skill.dominateCost = 0;
+        config.skill.destroyCost = 0;
+    }
+
     AIEngine whiteAI(std::uint32_t seed = 3) { return AIEngine(PlayerId::White, config.ai, config.skill, seed); }
 
     void humanConfirms(GameController& game) {
