@@ -387,7 +387,7 @@ public:
 };
 ```
 
-AIEngine 只回傳「想做的動作」，由 GameController 的 `tick` 呼叫它，再把結果丟進 `submit`。所以 AI 一定會通過和玩家相同的規則檢查（spec A1）。亂數使用 `std::mt19937`，以建構時傳入的 seed 初始化（spec A11）。
+AIEngine 只回傳「想做的動作」，由 GameController 的 `tick` 呼叫它，再把結果丟進 `submit`。所以 AI 一定會通過和玩家相同的規則檢查（spec A1）。兩方都是 AI 時（AI 對 AI 測試），同一次 `tick` 裡兩個 AI 的決策先後每次輪流，對局開始（含再來一局）的第一次 `tick` 由黑方先；否則先決策的一方永遠先搶到兩邊都想下的格子。亂數使用 `std::mt19937`，以建構時傳入的 seed 初始化（spec A11）。
 
 所有「下在某格」的候選都先排除對手的禁區（spec A5a），流程圖不另外畫出。
 

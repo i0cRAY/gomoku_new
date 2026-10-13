@@ -76,8 +76,14 @@ void GameController::letAIChooseSkill(PlayerId player) {
     confirmSkill(player);
 }
 
+// 兩方都是 AI 時每次輪流先決策，否則先決策的一方永遠先搶到雙方都想下的格子（design §4.8）
 void GameController::runAIs(TimeMs now) {
-    for (PlayerId p : {PlayerId::Black, PlayerId::White}) {
+    if (status != GameStatus::Running) {
+        return;
+    }
+    const PlayerId first = firstAI;
+    firstAI = opponent(firstAI);
+    for (PlayerId p : {first, opponent(first)}) {
         auto& ai = ais[indexOf(p)];
         if (!ai || status != GameStatus::Running) {
             continue;
@@ -125,6 +131,7 @@ void GameController::restart() {
     skillRevealed = {};
     lastClearedLines.clear();
     lastTime = 0;
+    firstAI = PlayerId::Black;
     emit stateChanged();
     for (PlayerId p : {PlayerId::Black, PlayerId::White}) {
         if (ais[indexOf(p)]) {

@@ -126,6 +126,44 @@ TEST_F(AIControllerTest, M1a_A3_ShowAiInfoDoesNotChangeWhatAISees) {
     }
 }
 
+// design §4.8：兩方都是 AI 時，同一次 tick 裡的決策先後每次輪流；開局第一次 tick 由黑方先。
+// 回能與下子間隔都是 500 ms，所以每次 tick 雙方都會各下一子
+TEST_F(AIControllerTest, P5_TwoAIsAlternateFirstMoveEachTick) {
+    config.regenInterval = 500;
+    GameController game{config};
+    std::vector<PlayerId> order;
+    int blackStones = 0;
+    int whiteStones = 0;
+    QObject::connect(&game, &GameController::stateChanged, [&] {
+        const Board board = game.viewFor(PlayerId::Black).board;
+        const int black = countStones(board, Cell::Black);
+        const int white = countStones(board, Cell::White);
+        if (black > blackStones) {
+            order.push_back(PlayerId::Black);
+        }
+        if (white > whiteStones) {
+            order.push_back(PlayerId::White);
+        }
+        blackStones = black;
+        whiteStones = white;
+    });
+    game.attachAI(PlayerId::Black, AIEngine(PlayerId::Black, config.ai, config.skill, 1));
+    game.attachAI(PlayerId::White, AIEngine(PlayerId::White, config.ai, config.skill, 2));
+    for (TimeMs t : {0, 500, 1000}) {
+        game.tick(t);
+    }
+    const std::vector<PlayerId> expected{PlayerId::Black, PlayerId::White, PlayerId::White,
+                                         PlayerId::Black, PlayerId::Black, PlayerId::White};
+    EXPECT_EQ(order, expected);
+
+    game.restart();  // 兩個 AI 自動選好技能，直接進入倒數
+    order.clear();
+    blackStones = 0;
+    whiteStones = 0;
+    game.tick(0);
+    EXPECT_EQ(order, (std::vector<PlayerId>{PlayerId::Black, PlayerId::White}));  // 新的一局又從黑方先
+}
+
 TEST_F(AIControllerTest, G4_AIChoosesAgainAfterRestart) {
     GameController game{config};
     game.attachAI(PlayerId::White, whiteAI());

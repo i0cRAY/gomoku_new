@@ -74,4 +74,5 @@ private:
     TimeMs lastTime = 0;  // 最後一次推進到的對局時間
     std::vector<ClearedLine> lastClearedLines;
     std::array<std::optional<AIEngine>, 2> ais{};
+    PlayerId firstAI = PlayerId::Black;  // 兩方都是 AI 時，這次 tick 先決策的一方（每次輪流，design §4.8）
 };
