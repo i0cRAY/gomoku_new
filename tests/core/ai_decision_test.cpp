@@ -58,8 +58,12 @@ std::optional<Pos> placedAt(const std::optional<Action>& action) {
     return std::nullopt;
 }
 
-const SkillAction* skillOf(const std::optional<Action>& action) {
-    return action ? std::get_if<SkillAction>(&*action) : nullptr;
+// 回傳複本：decide() 的結果常是暫時物件，不能回傳指向它內部的指標
+std::optional<SkillAction> skillOf(const std::optional<Action>& action) {
+    if (const SkillAction* skill = action ? std::get_if<SkillAction>(&*action) : nullptr) {
+        return *skill;
+    }
+    return std::nullopt;
 }
 
 std::set<std::pair<int, int>> cells(std::initializer_list<std::pair<int, int>> list) {
@@ -72,7 +76,7 @@ bool placedIn(const std::optional<Action>& action, const std::set<std::pair<int,
 }
 
 bool usedSkill(const std::optional<Action>& action, SkillId skill) {
-    const SkillAction* s = skillOf(action);
+    const auto s = skillOf(action);
     return s && s->skill == skill;
 }
 
@@ -141,8 +145,8 @@ TEST(AIDecisionTest, A5_A5c_DoubleThreatWithBombClearsThreat) {
     spec.skill = SkillId::Bomb;
     spec.energy = 2;  // S2：炸彈 2 格
     const auto action = ai.decide(viewOf(spec));
-    const SkillAction* bomb = skillOf(action);
-    ASSERT_NE(bomb, nullptr);
+    const auto bomb = skillOf(action);
+    ASSERT_TRUE(bomb.has_value());
     EXPECT_EQ(bomb->skill, SkillId::Bomb);
     ASSERT_TRUE(bomb->target.has_value());
     // 2×2 以目標為左上角，要涵蓋 (2..5, 7) 的威脅棋子
@@ -158,8 +162,8 @@ TEST(AIDecisionTest, A5c_PrefersNotClearingOwnStones) {
     AIEngine ai = engine();
     ViewSpec spec{{"", "", "", "", "", "", "..X.X....", "..OOOO..."}};
     spec.skill = SkillId::Bomb;
-    const SkillAction* bomb = skillOf(ai.decide(viewOf(spec)));
-    ASSERT_NE(bomb, nullptr);
+    const auto bomb = skillOf(ai.decide(viewOf(spec)));
+    ASSERT_TRUE(bomb.has_value());
     ASSERT_TRUE(bomb->target.has_value());
     EXPECT_EQ(bomb->target->y, 7);
     EXPECT_EQ(whiteFivePointsAfterBomb(viewOf(spec).board, *bomb->target), 0);
@@ -171,10 +175,10 @@ TEST(AIDecisionTest, A5c_TargetReproducibleWithSeed) {
         AIEngine b = engine(seed);
         ViewSpec spec = rowSpec("..OOOO...");
         spec.skill = SkillId::Bomb;
-        const SkillAction* x = skillOf(a.decide(viewOf(spec)));
-        const SkillAction* y = skillOf(b.decide(viewOf(spec)));
-        ASSERT_NE(x, nullptr);
-        ASSERT_NE(y, nullptr);
+        const auto x = skillOf(a.decide(viewOf(spec)));
+        const auto y = skillOf(b.decide(viewOf(spec)));
+        ASSERT_TRUE(x.has_value());
+        ASSERT_TRUE(y.has_value());
         EXPECT_EQ(x->target, y->target);
     }
 }
@@ -202,8 +206,8 @@ TEST(AIDecisionTest, A5_CannotPlaceButBombReadyBombs) {
     spec.skill = SkillId::Bomb;
     spec.cooldownRemaining = 300;  // 下子間隔未過
     const auto action = ai.decide(viewOf(spec));
-    const SkillAction* bomb = skillOf(action);
-    ASSERT_NE(bomb, nullptr);
+    const auto bomb = skillOf(action);
+    ASSERT_TRUE(bomb.has_value());
     EXPECT_EQ(bomb->skill, SkillId::Bomb);
 }
 
@@ -394,8 +398,8 @@ TEST(AIDecisionTest, A5b_DoubleThreatDestroysBestArea) {
     AIEngine ai = engine();
     ViewSpec spec{{"", "", "", "....O", "", ".X", "", "..OOOO..."}};
     spec.skill = SkillId::Destroy;
-    const SkillAction* destroy = skillOf(ai.decide(viewOf(spec)));
-    ASSERT_NE(destroy, nullptr);
+    const auto destroy = skillOf(ai.decide(viewOf(spec)));
+    ASSERT_TRUE(destroy.has_value());
     EXPECT_EQ(destroy->skill, SkillId::Destroy);
     EXPECT_EQ(destroy->target, std::optional<Pos>(Pos{4, 5}));
 }
@@ -405,8 +409,8 @@ TEST(AIDecisionTest, A5b_TargetAlwaysCoversThreatStone) {
     AIEngine ai = engine();
     ViewSpec spec{{"..........OOO", "..........OOO", "..........OOO", "", "", "", "", "..OOOO..."}};
     spec.skill = SkillId::Destroy;
-    const SkillAction* destroy = skillOf(ai.decide(viewOf(spec)));
-    ASSERT_NE(destroy, nullptr);
+    const auto destroy = skillOf(ai.decide(viewOf(spec)));
+    ASSERT_TRUE(destroy.has_value());
     ASSERT_TRUE(destroy->target.has_value());
     EXPECT_GE(destroy->target->x, 0);
     EXPECT_LE(destroy->target->x, 7);
@@ -420,10 +424,10 @@ TEST(AIDecisionTest, A5b_TieBrokenReproduciblyWithSeed) {
         AIEngine b = engine(seed);
         ViewSpec spec = rowSpec("..OOOO...");
         spec.skill = SkillId::Destroy;
-        const SkillAction* x = skillOf(a.decide(viewOf(spec)));
-        const SkillAction* y = skillOf(b.decide(viewOf(spec)));
-        ASSERT_NE(x, nullptr);
-        ASSERT_NE(y, nullptr);
+        const auto x = skillOf(a.decide(viewOf(spec)));
+        const auto y = skillOf(b.decide(viewOf(spec)));
+        ASSERT_TRUE(x.has_value());
+        ASSERT_TRUE(y.has_value());
         EXPECT_EQ(x->target, y->target);
     }
 }
@@ -566,7 +570,7 @@ TEST(AIDecisionTest, A7_BombOwnerBlocksOpenThreeInsteadOfBombing) {
         spec.skill = SkillId::Bomb;
         spec.energy = 10;
         const auto action = ai.decide(viewOf(spec));
-        EXPECT_EQ(skillOf(action), nullptr) << row;
+        EXPECT_FALSE(skillOf(action).has_value()) << row;
         EXPECT_TRUE(placedAt(action).has_value()) << row;
     }
 }
@@ -578,8 +582,8 @@ TEST(AIDecisionTest, A8b_DestroysWhenGainReachesThreshold) {
     AIEngine ai = engine();
     ViewSpec spec{{"", "", "..O.O", "", "..O"}};
     spec.skill = SkillId::Destroy;
-    const SkillAction* destroy = skillOf(ai.decide(viewOf(spec)));
-    ASSERT_NE(destroy, nullptr);
+    const auto destroy = skillOf(ai.decide(viewOf(spec)));
+    ASSERT_TRUE(destroy.has_value());
     EXPECT_EQ(destroy->skill, SkillId::Destroy);
     ASSERT_TRUE(destroy->target.has_value());
     EXPECT_LE(std::abs(destroy->target->x - 3), 1);  // 5×5 要同時涵蓋 x = 2 與 4、y = 2 與 4
@@ -746,7 +750,7 @@ TEST(AIDecisionTest, S2_A5_BombEnergyCostComesFromConfig) {
     spec.skill = SkillId::Bomb;
     spec.energy = 3;  // 預設耗能 2 夠用，但這裡要 4
     const auto action = ai.decide(viewOf(spec));
-    EXPECT_EQ(skillOf(action), nullptr);
+    EXPECT_FALSE(skillOf(action).has_value());
     EXPECT_TRUE(placedIn(action, cells({{1, 7}, {6, 7}})));
 }
 
