@@ -153,7 +153,7 @@ struct AIConfig {
 struct MatchConfig {
     TimeMs regenInterval = 2000;         // spec §4：500–10000 且為 500 的倍數，不合法時 assert（UI 只提供合法值）
     int maxEnergy = 10;
-    int startEnergy = 1;
+    int startEnergy = 3;                 // spec §4
     TimeMs placeCooldown = 500;          // spec §5
     TimeMs countdown = 3000;             // spec G2
     int minLineLength = 5;               // spec W1

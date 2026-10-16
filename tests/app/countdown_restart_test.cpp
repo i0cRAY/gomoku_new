@@ -62,7 +62,7 @@ TEST_F(CountdownRestartTest, G2_RunningWhenCountdownReachesZero) {
     const PlayerView view = game.viewFor(PlayerId::Black);
     EXPECT_EQ(view.status, GameStatus::Running);
     EXPECT_EQ(view.countdownRemaining, 0);
-    EXPECT_EQ(view.self.energy, 1);
+    EXPECT_EQ(view.self.energy, 3);  // §4：開局 3 格
 }
 
 TEST_F(CountdownRestartTest, G2_NoEnergyRegenDuringCountdown) {
@@ -70,11 +70,12 @@ TEST_F(CountdownRestartTest, G2_NoEnergyRegenDuringCountdown) {
     confirmBoth(game);
     game.tick(-2000);
     game.tick(0);
-    EXPECT_EQ(game.viewFor(PlayerId::Black).self.energy, 1);
+    EXPECT_EQ(game.viewFor(PlayerId::Black).self.energy, 3);
     EXPECT_EQ(game.viewFor(PlayerId::Black).self.regenProgress, 0);
 }
 
 TEST_F(CountdownRestartTest, G2_LateFirstTickCatchesUpFromZero) {
+    config.startEnergy = 1;
     GameController game{config};
     confirmBoth(game);
     game.tick(1250);  // 倒數期間沒有 tick，直接跳到 1250
@@ -143,7 +144,7 @@ TEST_F(CountdownRestartTest, G4_S4_NewMatchStartsFresh) {
     const PlayerView view = game.viewFor(PlayerId::Black);
     EXPECT_EQ(view.status, GameStatus::Running);
     EXPECT_EQ(view.now, 0);
-    EXPECT_EQ(view.self.energy, 1);
+    EXPECT_EQ(view.self.energy, 3);  // §4：再來一局也回到 3 格
     EXPECT_EQ(view.self.lastPlaceTime, std::nullopt);
     EXPECT_TRUE(game.submit(PlaceAction{PlayerId::Black, {0, 0}}, 0).accepted);  // 舊棋子已清除
 }
@@ -164,7 +165,7 @@ TEST_F(CountdownRestartTest, G2_U2_CountdownViewShowsChosenSkillAndStartEnergy) 
     confirmBoth(game, SkillId::Bomb, SkillId::Dominate);
     const PlayerView black = game.viewFor(PlayerId::Black);
     EXPECT_EQ(black.self.skill, SkillId::Bomb);
-    EXPECT_EQ(black.self.energy, 1);
+    EXPECT_EQ(black.self.energy, 3);
     EXPECT_EQ(game.viewFor(PlayerId::White).self.skill, SkillId::Dominate);
 }
 

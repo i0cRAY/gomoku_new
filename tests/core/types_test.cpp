@@ -31,7 +31,7 @@ TEST(ConfigTest, Sec4To8_DefaultsMatchSpecTables) {
     const MatchConfig config;
     EXPECT_EQ(config.regenInterval, 2000);
     EXPECT_EQ(config.maxEnergy, 10);
-    EXPECT_EQ(config.startEnergy, 1);
+    EXPECT_EQ(config.startEnergy, 3);
     EXPECT_EQ(config.placeCooldown, 500);
     EXPECT_EQ(config.countdown, 3000);
     EXPECT_EQ(config.skill.bombCost, 1);

@@ -34,7 +34,12 @@ protected:
 
     GameStatus status() const { return controller.viewFor(PlayerId::Black).status; }
 
-    MatchConfig config;
+    // 下列測試以開局 1 格計算能量與時間點，明確設定（§4 預設為 3）
+    MatchConfig config = [] {
+        MatchConfig c;
+        c.startEnergy = 1;
+        return c;
+    }();
     GameController controller{config};
     int stateChangedCount = 0;
     int gameOverCount = 0;

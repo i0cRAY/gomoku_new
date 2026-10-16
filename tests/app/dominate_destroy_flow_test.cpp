@@ -34,6 +34,7 @@ class SkillFlowNewTest : public ::testing::Test {
 protected:
     void SetUp() override {
         config.regenInterval = 500;
+        config.startEnergy = 1;  // 下面的時間點以開局 1 格計算（§4 預設為 3）
     }
 
     void start(SkillId blackSkill, SkillId whiteSkill) {

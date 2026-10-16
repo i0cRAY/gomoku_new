@@ -56,7 +56,12 @@ protected:
         return controller.submit(action, now).reason;
     }
 
-    MatchConfig config;
+    // 下列測試以開局 1 格計算能量與時間點，明確設定（§4 預設為 3）
+    MatchConfig config = [] {
+        MatchConfig c;
+        c.startEnergy = 1;
+        return c;
+    }();
     GameController controller{config};
     int stateChangedCount = 0;
     std::vector<Rejection> rejections;
@@ -373,10 +378,16 @@ TEST_F(GameControllerTest, E6_ViewHasNextEnergyRatio) {
     EXPECT_DOUBLE_EQ(view.nextEnergyRatio, 0.5);
 }
 
-TEST_F(GameControllerTest, E2_EnergyStartsAtOneAndRegensFromZero) {
-    startMatch();
-    EXPECT_EQ(controller.viewFor(PlayerId::Black).self.energy, 1);
-    controller.tick(4000);
-    EXPECT_EQ(controller.viewFor(PlayerId::Black).self.energy, 3);
-    EXPECT_EQ(controller.viewFor(PlayerId::White).self.energy, 3);
+TEST_F(GameControllerTest, E2_Sec4_EnergyStartsAtThreeAndRegensFromZero) {
+    GameController game{MatchConfig{}};  // 預設設定（§4：開局 3 格）
+    game.selectSkill(PlayerId::Black, SkillId::Dominate);
+    game.selectSkill(PlayerId::White, SkillId::Destroy);
+    game.confirmSkill(PlayerId::Black);
+    game.confirmSkill(PlayerId::White);
+    game.tick(0);
+    EXPECT_EQ(game.viewFor(PlayerId::Black).self.energy, 3);
+    EXPECT_EQ(game.viewFor(PlayerId::White).self.energy, 3);
+    game.tick(4000);
+    EXPECT_EQ(game.viewFor(PlayerId::Black).self.energy, 5);
+    EXPECT_EQ(game.viewFor(PlayerId::White).self.energy, 5);
 }

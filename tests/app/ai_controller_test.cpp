@@ -69,6 +69,7 @@ TEST_F(AIControllerTest, M1_AIActsOnTickThroughSubmit) {
 }
 
 TEST_F(AIControllerTest, A1_AIRespectsEnergyAndPlaceInterval) {
+    config.startEnergy = 1;
     GameController game{config};  // T = 2000：開局 1 格，之後每 2 秒 1 格
     game.attachAI(PlayerId::White, whiteAI());
     humanConfirms(game);
