@@ -81,6 +81,9 @@ std::string matchInfoText(const PlayerView& view) {
     }
     const int total = secondsRoundedUp(view.timeRemaining);
     std::ostringstream text;
+    if (view.overtime) {
+        text << "延長賽 ";  // W10
+    }
     text << "剩餘 " << total / kSecondsPerMinute << ':' << std::setw(2) << std::setfill('0')
          << total % kSecondsPerMinute;
     return text.str();

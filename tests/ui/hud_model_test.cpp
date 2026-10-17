@@ -179,6 +179,16 @@ TEST(HudModelTest, U8_TimeLimitShowsRemainingClock) {
     EXPECT_EQ(matchInfoText(v), "剩餘 0:00");
 }
 
+TEST(HudModelTest, U8_W10_OvertimeShowsLabelAndRemaining) {
+    PlayerView v;
+    v.mode = MatchMode::TimeLimit;
+    v.overtime = true;
+    v.timeRemaining = 60000;
+    EXPECT_EQ(matchInfoText(v), "延長賽 剩餘 1:00");
+    v.timeRemaining = 44500;
+    EXPECT_EQ(matchInfoText(v), "延長賽 剩餘 0:45");
+}
+
 TEST(HudModelTest, U8_ScoreTargetShowsTarget) {
     PlayerView v;
     v.mode = MatchMode::ScoreTarget;

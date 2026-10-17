@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -23,5 +24,7 @@ std::vector<SkillId> skillOptions();            // U7：開放的技能，依顯
 std::string skillDescription(SkillId, const SkillConfig&);  // U7：效果說明與冷卻時間
 std::string countdownText(TimeMs remaining);    // G2：3、2、1
 std::string resultText(GameStatus);             // U6：勝方或和局；未結束時為空字串
-std::string finalResultText(GameStatus, const std::array<int, 2>& scores);  // U6：勝負加上雙方分數
+// U6：勝負加上雙方分數；用盤面分決勝時（W11）另外加上雙方盤面分
+std::string finalResultText(GameStatus, const std::array<int, 2>& scores,
+                            const std::optional<std::array<int, 2>>& boardScores = std::nullopt);
 bool isFinished(GameStatus);

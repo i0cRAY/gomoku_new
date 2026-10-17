@@ -26,7 +26,7 @@ bool isSkillButtonEnabled(const PlayerView&);
 std::string targetingPrompt(SkillId, const SkillConfig&);
 // U8：雙方分數，例如「黑 5 : 11 白」
 std::string scoreText(const PlayerView&);
-// U8：限時模式顯示剩餘時間（m:ss，無條件進位到秒），達分模式顯示目標分數
+// U8：限時模式顯示剩餘時間（m:ss，無條件進位到秒），延長賽中加上「延長賽」（W10）；達分模式顯示目標分數
 std::string matchInfoText(const PlayerView&);
 
 std::string rejectReasonText(RejectReason);  // U5

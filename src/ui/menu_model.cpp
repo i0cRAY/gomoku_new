@@ -96,12 +96,18 @@ std::string resultText(GameStatus status) {
     }
 }
 
-std::string finalResultText(GameStatus status, const std::array<int, 2>& scores) {
+std::string finalResultText(GameStatus status, const std::array<int, 2>& scores,
+                            const std::optional<std::array<int, 2>>& boardScores) {
     const std::string result = resultText(status);
     if (result.empty()) {
         return {};
     }
-    return result + "\n黑 " + std::to_string(scores[0]) + " : " + std::to_string(scores[1]) + " 白";
+    std::string text = result + "\n黑 " + std::to_string(scores[0]) + " : " + std::to_string(scores[1]) + " 白";
+    if (boardScores) {
+        const auto [black, white] = *boardScores;
+        text += "\n盤面分 黑 " + std::to_string(black) + " : " + std::to_string(white) + " 白";  // W11
+    }
+    return text;
 }
 
 bool isFinished(GameStatus status) {

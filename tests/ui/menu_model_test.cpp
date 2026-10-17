@@ -111,6 +111,15 @@ TEST(MenuModelTest, U6_FinalResultTextIncludesScores) {
     EXPECT_EQ(finalResultText(GameStatus::Running, {1, 2}), "");
 }
 
+TEST(MenuModelTest, U6_W11_FinalResultShowsBoardScores) {
+    EXPECT_EQ(finalResultText(GameStatus::BlackWon, {5, 5}, std::array<int, 2>{3, 1}),
+              "黑方獲勝\n黑 5 : 5 白\n盤面分 黑 3 : 1 白");
+    EXPECT_EQ(finalResultText(GameStatus::Draw, {0, 0}, std::array<int, 2>{0, 0}),
+              "和局\n黑 0 : 0 白\n盤面分 黑 0 : 0 白");
+    EXPECT_EQ(finalResultText(GameStatus::WhiteWon, {0, 5}, std::nullopt), "白方獲勝\n黑 0 : 5 白");
+    EXPECT_EQ(finalResultText(GameStatus::Running, {0, 0}, std::array<int, 2>{1, 0}), "");
+}
+
 // ---- U7、S1b：開放的技能（炸彈暫停使用）----
 
 TEST(MenuModelTest, U7_S1b_SkillOptionsExcludeBomb) {

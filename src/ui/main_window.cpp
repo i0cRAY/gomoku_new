@@ -278,7 +278,7 @@ void MainWindow::refresh() {
     if (view.status == GameStatus::Countdown) {
         banner->setText(toQString(countdownText(view.countdownRemaining)));
     } else {
-        banner->setText(toQString(finalResultText(view.status, view.scores)));  // U6；進行中為空字串
+        banner->setText(toQString(finalResultText(view.status, view.scores, view.boardScores)));  // U6；進行中為空字串
     }
     // G4a：倒數、進行中與結束後都一直顯示（U12）
 }
