@@ -150,6 +150,13 @@ struct AIConfig {
     int destroyMinGain = 3;              // spec A8b：主動摧毀的最低「對手子 − 己方子」
 };
 
+// spec W11：盤面分，只用來決勝 ⚠️待確認
+struct BoardScoreConfig {
+    int openFour = 3;
+    int closedFour = 2;
+    int openThree = 1;
+};
+
 struct MatchConfig {
     TimeMs regenInterval = 2000;         // spec §4：500–10000 且為 500 的倍數，不合法時 assert（UI 只提供合法值）
     int maxEnergy = 10;
@@ -160,6 +167,8 @@ struct MatchConfig {
     MatchMode mode = MatchMode::TimeLimit;   // spec G1b ⚠️待確認
     TimeMs timeLimit = 180000;           // 限時模式：60000／180000／300000
     int targetScore = 20;                // 達分模式：5–100 ⚠️待確認
+    TimeMs overtime = 60000;             // spec W10：限時模式同分時的延長賽長度 ⚠️待確認
+    BoardScoreConfig boardScore;         // spec W11
     bool showAiInfo = false;             // spec M1a，僅 M1 使用，只影響 UI
     SkillConfig skill;
     AIConfig ai;                         // 僅 M1 使用
@@ -195,6 +204,9 @@ public:
     // 回傳剛下在 last 的那顆子在每個方向形成的連線（≥ minLength 顆），每個方向各一條；沒有則回傳空 vector
     // 交叉時 last 會同時出現在多條線裡（W6）
     static std::vector<std::vector<Pos>> findLines(const Board&, Pos last, int minLength);
+    // spec W11：player 在盤面上的棋型分數（活四、衝四、活三），掃描整個棋盤的四個方向
+    // 只算剛好連續 3、4 子的段；邊界、Destroyed 與對手棋子算擋住，禁區不在 Board 裡所以自然算空格
+    static int boardScore(const Board&, PlayerId, const BoardScoreConfig&);
 };
 ```
 
@@ -278,7 +290,7 @@ public:
     void selectSkill(PlayerId, SkillId);              // 技能選擇階段才有效（spec S1、G1a）
     void confirmSkill(PlayerId);                      // 未選技能時忽略；雙方都確定後進入倒數，對局時間從 −3000 起算（spec G2）
     ActionResult submit(const Action&, TimeMs now);   // 依 spec P1 / SB4 / SZ5 / SX4 的順序檢查
-    void tick(TimeMs now);                            // 推進能量、處理倒數、時限（W7）、禁區到期與 AI
+    void tick(TimeMs now);                            // 推進能量、處理倒數、時限與延長賽（W7、W10）、禁區到期與 AI
     PlayerView viewFor(PlayerId) const;               // 某位玩家看得到的資訊（spec E5）
     void restart();                                   // G4、G4a：任何狀態都可呼叫，重置後回到技能選擇
     void abort();                                     // G4a、G4b、W5：狀態變成 Aborted，不計勝負
@@ -286,16 +298,17 @@ signals:
     void stateChanged();                              // 收到後呼叫 viewFor(自己) 取資料
     void actionRejected(PlayerId, RejectReason, std::optional<Pos>);
     void linesCleared(std::vector<ClearedLine>);      // W1、U11
-    void gameOver(GameStatus, std::array<int, 2> scores);   // U6
+    void gameOver(GameStatus, std::array<int, 2> scores,
+                  std::optional<std::array<int, 2>> boardScores);   // U6；只有用盤面分決勝時才有值（W11）
 };
 ```
 
 `submit` 的步驟：
 
-1. 把雙方 PlayerState 推進到 `now`（EnergyManager::advance）；若 `now` ≥ 時限，先結束對局（W7）
+1. 把雙方 PlayerState 推進到 `now`（EnergyManager::advance）；若 `now` ≥ 時限：不同分就結束對局（W7、W9）；同分且還沒進延長賽就切換成延長賽（W10）；若 `now` ≥ 時限 + 延長時間，依分數、再依盤面分結束對局（W10、W11）
 2. 依 spec 的順序檢查，失敗就發 `actionRejected` 並回傳
 3. 套用變更：
-    - 下子：`Board::set` → `SkillSystem::onPlaced`（霸道禁區）→ `RuleChecker::findLines` → 有連線就移除棋子、加分（W1、W2、W6）、發 `linesCleared` → 達分模式檢查 W8 → 棋盤沒有空格就結束（W4）
+    - 下子：`Board::set` → `SkillSystem::onPlaced`（霸道禁區）→ `RuleChecker::findLines` → 有連線就移除棋子、加分（W1、W2、W6）、發 `linesCleared` → 達分模式檢查 W8 → 棋盤沒有空格就結束（W4；同分時直接比盤面分，不進延長賽）
     - 技能：`EnergyManager::consume(state, costOf(skill))`（S2）→ `SkillSystem::apply`（摧毀時一併清掉範圍內的禁區）
 4. 發 `stateChanged`（結束時再發 `gameOver`）
 
@@ -315,7 +328,9 @@ struct PlayerView {
     // 以下為公開資訊（spec E5）
     std::array<int, 2> scores;           // 以 PlayerId 為索引（U8）
     MatchMode mode;
-    TimeMs timeRemaining;                // 限時模式的剩餘毫秒（W7、U8）
+    TimeMs timeRemaining;                // 限時模式的剩餘毫秒（W7、U8）；延長賽中為延長賽的剩餘毫秒
+    bool overtime;                       // 是否在延長賽中（W10、U8）
+    std::optional<std::array<int, 2>> boardScores;   // 只有用盤面分決勝時才有值（W11、U6）
     int targetScore;                     // 達分模式的目標分數（W8、U8）
     std::vector<ZoneCell> zones;         // 未到期的禁區（SZ4、U9）
     std::vector<ClearedLine> lastClearedLines;   // 最近一次消除的連線（U11）
@@ -341,7 +356,7 @@ signals:
     void stateChanged();
     void actionRejected(PlayerId, RejectReason, std::optional<Pos>);
     void linesCleared(std::vector<ClearedLine>);
-    void gameOver(GameStatus, std::array<int, 2> scores);
+    void gameOver(GameStatus, std::array<int, 2> scores, std::optional<std::array<int, 2>> boardScores);
     void opponentReady();                             // 只告知對手已確定技能（spec S1、U7）
     void rematchRequested();                          // 對手在對局中提出重開（N9）
     void rematchDeclined();                           // 對手拒絕了我的邀請（N9）
@@ -467,7 +482,7 @@ signals:
 |`opponent_ready`|主機 → 加入方|—（只告知對手已確定，不透露選了什麼，spec S1）|
 |`request`|加入方 → 主機|`seq`、`action`|
 |`reject`|主機 → 加入方|`seq`、`reason`|
-|`snapshot`|主機 → 加入方|加入方的 PlayerView：棋盤（含 Destroyed）、禁區、雙方分數、模式與剩餘時間或目標分數、最近消除的連線、加入方自己的狀態（不含主機方的能量與霸道次數，spec N4）|
+|`snapshot`|主機 → 加入方|加入方的 PlayerView：棋盤（含 Destroyed）、禁區、雙方分數、模式與剩餘時間或目標分數、是否在延長賽中、盤面分（有決勝時）、最近消除的連線、加入方自己的狀態（不含主機方的能量與霸道次數，spec N4）|
 |`linesCleared`|主機 → 加入方|被消除的連線（給 U11 動畫用；快照也會帶，這則只是讓動畫即時）|
 |`ping`|雙向|—|
 |`rematch`|雙向|—（對局結束後：雙方都送出後才回到技能選擇，spec G4）|
@@ -483,7 +498,7 @@ signals:
 
 - `BoardView`（QWidget，覆寫 `paintEvent`）：畫格線、棋子、已摧毀的格子、禁區（U9）、被拒絕時的紅色閃爍、炸彈／摧毀選目標模式（預覽炸彈 2×2、摧毀 5×5）、消除連線的閃爍與「+N」（U11）。
 - `HudView`（QWidget）：自己的能量條（10 格，最後一格依比例部分填滿）、自己所選技能的按鈕與能量是否足夠（≥ 3）、霸道次數或摧毀已用（用過後按鈕變灰）。能量條用 `paintEvent` 自己畫，不用 `QProgressBar`，才能畫出 10 格分段加部分填滿的樣子。可設為唯讀模式，給 M1a 的 AI HUD 使用（U10）。
-- `ScoreBoard`（QWidget）：雙方分數與剩餘時間或目標分數（U8）。
+- `ScoreBoard`（QWidget）：雙方分數與剩餘時間或目標分數；延長賽中標示「延長賽」與延長賽剩餘時間（U8）。
 - `MainWindow`：主選單（人機 / 開房 / 加入）、設定（回能間隔、比賽模式、顯示 AI 資訊）、技能選擇畫面（spec U7，含回主選單）、對局中的「再來一局」／「回主選單」按鈕與確認視窗（U12）、重開邀請對話框（N9）、結束畫面。
 - UI 收到 `stateChanged` 後呼叫 `viewFor(自己)` 重畫，不自己保存遊戲狀態。
 
