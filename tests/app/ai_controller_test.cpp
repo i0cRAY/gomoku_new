@@ -218,7 +218,7 @@ void runSmokeGames(MatchMode mode) {
         const PlayerView view = controller.viewFor(PlayerId::Black);
         ASSERT_TRUE(finished(view.status)) << "game " << game << " 沒有在 30 分鐘內結束";
         if (mode == MatchMode::TimeLimit) {
-            EXPECT_LE(t - kTick, match.timeLimit) << "game " << game;  // W7：時間到就結束
+            EXPECT_LE(t - kTick, match.timeLimit + match.overtime) << "game " << game;  // W7、W10：時間到就結束
         } else {
             const bool reachedTarget = view.scores[0] >= match.targetScore || view.scores[1] >= match.targetScore;
             const bool boardFull = countStones(view.board, Cell::Empty) == 0;

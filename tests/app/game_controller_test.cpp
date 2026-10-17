@@ -334,6 +334,43 @@ TEST_F(GameControllerWinTest, W4_W9_FullBoardEndsGameByScore) {
     ASSERT_EQ(gameOvers.size(), 1u);
     EXPECT_EQ(gameOvers[0].status, GameStatus::Draw);
     EXPECT_EQ(gameOvers[0].scores, (std::array<int, 2>{0, 0}));
+    // W4、W11：不進延長賽，直接比盤面分（這種塗法最多連 2 子，雙方都是 0）
+    EXPECT_FALSE(game->viewFor(PlayerId::Black).overtime);
+    EXPECT_EQ(game->viewFor(PlayerId::Black).boardScores, (std::array<int, 2>{0, 0}));
+}
+
+// W4、W10：延長賽中棋盤下滿也直接結束，依盤面分判定
+TEST_F(GameControllerWinTest, W4_W10_FullBoardDuringOvertimeEndsGame) {
+    MatchConfig match = config;
+    match.timeLimit = 1000;       // 下滿之前就進延長賽
+    match.overtime = 3600000;     // 延長賽不會先結束
+    auto game = started(match);
+
+    std::vector<Pos> blackCells;
+    std::vector<Pos> whiteCells;
+    for (int y = 0; y < Board::kSize; ++y) {
+        for (int x = 0; x < Board::kSize; ++x) {
+            (((x / 2) + y) % 2 == 0 ? blackCells : whiteCells).push_back({x, y});
+        }
+    }
+    const std::size_t rounds = std::max(blackCells.size(), whiteCells.size());
+    for (std::size_t i = 0; i < rounds; ++i) {
+        const TimeMs now = static_cast<TimeMs>(i) * 1000;
+        if (i < blackCells.size()) {
+            ASSERT_TRUE(game->submit(PlaceAction{PlayerId::Black, blackCells[i]}, now).accepted) << i;
+        }
+        if (i < whiteCells.size()) {
+            ASSERT_TRUE(game->submit(PlaceAction{PlayerId::White, whiteCells[i]}, now).accepted) << i;
+        }
+        if (i == 1) {
+            ASSERT_TRUE(game->viewFor(PlayerId::Black).overtime);
+        }
+    }
+
+    const PlayerView view = game->viewFor(PlayerId::Black);
+    EXPECT_EQ(view.status, GameStatus::Draw);
+    EXPECT_EQ(view.boardScores, (std::array<int, 2>{0, 0}));
+    EXPECT_EQ(gameOvers.size(), 1u);
 }
 
 // ---- 訊號 ----

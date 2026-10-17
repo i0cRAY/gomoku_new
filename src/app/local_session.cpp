@@ -5,10 +5,11 @@ LocalSession::LocalSession(MatchConfig config, PlayerId localPlayer, QObject* pa
     connect(&controller, &GameController::stateChanged, this, &GameSession::stateChanged);
     connect(&controller, &GameController::actionRejected, this, &GameSession::actionRejected);
     connect(&controller, &GameController::linesCleared, this, &GameSession::linesCleared);
-    connect(&controller, &GameController::gameOver, this, [this](GameStatus status, std::array<int, 2> scores) {
-        gameClock.stop();
-        emit gameOver(status, scores);
-    });
+    connect(&controller, &GameController::gameOver, this,
+            [this](GameStatus status, std::array<int, 2> scores, std::optional<std::array<int, 2>> boardScores) {
+                gameClock.stop();
+                emit gameOver(status, scores, boardScores);
+            });
     connect(&controller, &GameController::skillConfirmed, this, [this](PlayerId player) {
         if (player != this->localPlayer) {
             emit opponentReady();

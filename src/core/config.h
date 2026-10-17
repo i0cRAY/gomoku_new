@@ -62,6 +62,8 @@ struct MatchConfig {
     MatchMode mode = MatchMode::TimeLimit;  // spec G1b ⚠️待確認
     TimeMs timeLimit = 180000;    // 限時模式：60000／180000／300000
     int targetScore = 20;         // 達分模式：5–100 ⚠️待確認
+    TimeMs overtime = 60000;      // spec W10：限時模式同分時的延長賽長度 ⚠️待確認
+    BoardScoreConfig boardScore;  // spec W11
     bool showAiInfo = false;      // spec M1a，僅 M1 使用，只影響 UI
     SkillConfig skill;
     AIConfig ai;  // 僅 M1 使用

@@ -23,7 +23,9 @@ struct PlayerView {
     // 以下為公開資訊（spec E5）
     std::array<int, 2> scores{};                    // 以 PlayerId 為索引（W1、U8）
     MatchMode mode = MatchMode::TimeLimit;          // G1b
-    TimeMs timeRemaining = 0;                       // 限時模式的剩餘毫秒（W7、U8）
+    TimeMs timeRemaining = 0;                       // 限時模式的剩餘毫秒（W7、U8）；延長賽中為延長賽的剩餘毫秒
+    bool overtime = false;                          // 是否在延長賽中（W10、U8）
+    std::optional<std::array<int, 2>> boardScores;  // 只有用盤面分決勝時才有值（W11、U6）
     int targetScore = 0;                            // 達分模式的目標分數（W8、U8）
     std::vector<ZoneCell> zones;                    // 未到期的禁區（SZ4、U9）
     std::vector<ClearedLine> lastClearedLines;      // 最近一次消除的連線（U11）

@@ -27,7 +27,7 @@ signals:
     void stateChanged();
     void actionRejected(PlayerId, RejectReason, std::optional<Pos>);
     void linesCleared(std::vector<ClearedLine>);         // W1、U11
-    void gameOver(GameStatus, std::array<int, 2> scores);  // U6
+    void gameOver(GameStatus, std::array<int, 2> scores, std::optional<std::array<int, 2>> boardScores);  // U6、W11
     void opponentReady();     // 只告知對手已確定技能（spec S1、U7）
     void rematchRequested();  // 對手在對局中提出重開（N9）
     void rematchDeclined();   // 對手拒絕了我的邀請（N9）

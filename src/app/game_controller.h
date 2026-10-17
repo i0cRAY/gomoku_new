@@ -26,7 +26,7 @@ public:
     void selectSkill(PlayerId, SkillId);             // 技能選擇階段、尚未確定時才有效（spec S1、G1a）
     void confirmSkill(PlayerId);                     // 未選技能時忽略；雙方都確定後進入倒數，對局時間從 −3000 起算（spec G2）
     ActionResult submit(const Action&, TimeMs now);  // 依 spec P1 / SB4 / SZ5 / SX4 的順序檢查
-    void tick(TimeMs now);                           // 推進倒數、能量、時限（W7）、禁區到期與 AI
+    void tick(TimeMs now);                           // 推進倒數、能量、時限與延長賽（W7、W10）、禁區到期與 AI
     PlayerView viewFor(PlayerId) const;
     // G4、G4a：任何狀態都可呼叫。保留設定與上一局的技能選擇，其餘全部重置並回到技能選擇
     void restart();
@@ -39,7 +39,8 @@ signals:
     void stateChanged();  // 收到後呼叫 viewFor(自己) 取資料
     void actionRejected(PlayerId, RejectReason, std::optional<Pos>);
     void linesCleared(std::vector<ClearedLine>);         // W1、U11
-    void gameOver(GameStatus, std::array<int, 2> scores);  // U6
+    // U6；boardScores 只有用盤面分決勝時才有值（W11）
+    void gameOver(GameStatus, std::array<int, 2> scores, std::optional<std::array<int, 2>> boardScores);
     void skillConfirmed(PlayerId);  // 某位玩家按下確定（只告知是誰，不透露選了什麼，spec S1、U7）
 
 private:
@@ -53,7 +54,8 @@ private:
     ActionResult reject(PlayerId, RejectReason, std::optional<Pos>);
     void clearLines(PlayerId, Pos last);  // W1、W2、W6
     void finish(GameStatus);
-    void finishByScore();  // W4、W7、W9
+    void finishByScore();  // W4、W7、W9、W11
+    TimeMs matchEnd() const { return config.timeLimit + (overtime ? config.overtime : 0); }  // W7、W10
     bool isTimeLimited() const { return config.mode == MatchMode::TimeLimit; }
     std::array<int, 2> scores() const { return {players[0].score, players[1].score}; }
 
@@ -73,6 +75,8 @@ private:
     std::array<bool, 2> skillRevealed{};  // 是否已經用過技能（S1：用過後對手才知道）
     TimeMs lastTime = 0;  // 最後一次推進到的對局時間
     std::vector<ClearedLine> lastClearedLines;
+    bool overtime = false;                          // W10
+    std::optional<std::array<int, 2>> boardScores;  // W11：用盤面分決勝時才有值
     std::array<std::optional<AIEngine>, 2> ais{};
     PlayerId firstAI = PlayerId::Black;  // 兩方都是 AI 時，這次 tick 先決策的一方（每次輪流，design §4.8）
 };

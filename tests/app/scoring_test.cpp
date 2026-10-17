@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "app/game_controller.h"
@@ -21,6 +22,7 @@ std::vector<Pos> sorted(std::vector<Pos> v) {
 struct GameOverEvent {
     GameStatus status;
     std::array<int, 2> scores;
+    std::optional<std::array<int, 2>> boardScores;
 };
 
 }  // namespace
@@ -36,7 +38,9 @@ protected:
         QObject::connect(game.get(), &GameController::linesCleared,
                          [this](std::vector<ClearedLine> lines) { cleared.push_back(lines); });
         QObject::connect(game.get(), &GameController::gameOver,
-                         [this](GameStatus s, std::array<int, 2> scores) { gameOvers.push_back({s, scores}); });
+                         [this](GameStatus s, std::array<int, 2> scores, std::optional<std::array<int, 2>> board) {
+                             gameOvers.push_back({s, scores, board});
+                         });
         game->selectSkill(PlayerId::Black, blackSkill);
         game->selectSkill(PlayerId::White, whiteSkill);
         game->confirmSkill(PlayerId::Black);
@@ -145,12 +149,13 @@ TEST_F(ScoringTest, W7_TickPastLimitEndsGame) {
     config.mode = MatchMode::TimeLimit;
     config.timeLimit = 60000;
     start();
+    placeBlack({{0, 0}, {1, 0}, {2, 0}, {3, 0}, {4, 0}});  // 黑方 5 分，不會進延長賽（W10）
     game->tick(59950);
     EXPECT_EQ(game->viewFor(PlayerId::Black).status, GameStatus::Running);
     EXPECT_EQ(game->viewFor(PlayerId::Black).timeRemaining, 50);
     game->tick(60010);
     const PlayerView view = game->viewFor(PlayerId::Black);
-    EXPECT_EQ(view.status, GameStatus::Draw);  // W9：0 : 0
+    EXPECT_EQ(view.status, GameStatus::BlackWon);  // W9
     EXPECT_EQ(view.timeRemaining, 0);
     EXPECT_EQ(view.now, 60000);  // 停在時限
     EXPECT_EQ(gameOvers.size(), 1u);
@@ -217,4 +222,188 @@ TEST_F(ScoringTest, E5_BothPlayersSeeBothScores) {
     placeBlack({{0, 0}, {1, 0}, {2, 0}, {3, 0}, {4, 0}});
     EXPECT_EQ(game->viewFor(PlayerId::Black).scores, (std::array<int, 2>{5, 0}));
     EXPECT_EQ(game->viewFor(PlayerId::White).scores, (std::array<int, 2>{5, 0}));
+}
+
+// ---- W9、W10、W11：延長賽與盤面分決勝 ----
+
+class OvertimeTest : public ScoringTest {
+protected:
+    void SetUp() override {
+        ScoringTest::SetUp();
+        config.mode = MatchMode::TimeLimit;
+        config.timeLimit = 60000;
+        config.overtime = 60000;
+    }
+
+    static constexpr TimeMs kLimit = 60000;
+    static constexpr TimeMs kEnd = 120000;  // 時限 + 延長賽
+
+    PlayerView view() const { return game->viewFor(PlayerId::Black); }
+};
+
+TEST_F(OvertimeTest, W9_DifferentScoresAtLimitEndsWithoutBoardScores) {
+    start();
+    placeBlack({{0, 0}, {1, 0}, {2, 0}, {3, 0}, {4, 0}});
+    game->tick(kLimit);
+    EXPECT_EQ(view().status, GameStatus::BlackWon);
+    EXPECT_FALSE(view().overtime);
+    EXPECT_FALSE(view().boardScores.has_value());
+    ASSERT_EQ(gameOvers.size(), 1u);
+    EXPECT_FALSE(gameOvers[0].boardScores.has_value());
+}
+
+TEST_F(OvertimeTest, W10_TieAtLimitEntersOvertime) {
+    start();
+    game->tick(kLimit);
+    EXPECT_EQ(view().status, GameStatus::Running);
+    EXPECT_TRUE(view().overtime);
+    EXPECT_EQ(view().timeRemaining, 60000);
+    EXPECT_TRUE(gameOvers.empty());
+    game->tick(kLimit + 12345);
+    EXPECT_EQ(view().timeRemaining, 60000 - 12345);
+    EXPECT_TRUE(game->viewFor(PlayerId::White).overtime);  // 公開資訊（U8、N4）
+}
+
+TEST_F(OvertimeTest, W10_NonZeroTieAlsoEntersOvertime) {
+    start();
+    TimeMs t = placeBlack({{0, 0}, {1, 0}, {2, 0}, {3, 0}, {4, 0}});
+    for (int i = 0; i < 5; ++i, t += 1000) {
+        ASSERT_TRUE(game->submit(white(i, 9), t).accepted);
+    }
+    ASSERT_EQ(scores(), (std::array<int, 2>{5, 5}));
+    game->tick(kLimit);
+    EXPECT_EQ(view().status, GameStatus::Running);
+    EXPECT_TRUE(view().overtime);
+}
+
+TEST_F(OvertimeTest, W10_RequestAtLimitAcceptedWhenTied) {
+    start();
+    EXPECT_TRUE(game->submit(white(7, 7), kLimit).accepted);
+    EXPECT_TRUE(view().overtime);
+}
+
+TEST_F(OvertimeTest, W10_ScoringDuringOvertimeDecidesWinner) {
+    start();
+    game->tick(kLimit);
+    placeBlack({{0, 0}, {1, 0}, {2, 0}, {3, 0}, {4, 0}}, kLimit);
+    EXPECT_EQ(scores(), (std::array<int, 2>{5, 0}));
+    EXPECT_EQ(view().status, GameStatus::Running);  // 打滿 1 分鐘，不是驟死
+    game->tick(kEnd);
+    EXPECT_EQ(view().status, GameStatus::BlackWon);
+    EXPECT_FALSE(view().boardScores.has_value());
+    ASSERT_EQ(gameOvers.size(), 1u);
+    EXPECT_EQ(gameOvers[0].status, GameStatus::BlackWon);
+}
+
+TEST_F(OvertimeTest, W11_TieAfterOvertimeDecidedByBoardScore) {
+    start();
+    ASSERT_TRUE(game->submit(white(3, 9), 0).accepted);
+    ASSERT_TRUE(game->submit(white(4, 9), 1000).accepted);  // 白方兩子不算分
+    placeBlack({{3, 3}, {4, 3}, {5, 3}}, 1000);             // 黑方活三
+    game->tick(kLimit);
+    ASSERT_TRUE(view().overtime);
+    game->tick(kEnd);
+    EXPECT_EQ(view().status, GameStatus::BlackWon);
+    EXPECT_EQ(view().boardScores, (std::array<int, 2>{1, 0}));
+    EXPECT_EQ(view().scores, (std::array<int, 2>{0, 0}));  // 盤面分不加進分數
+    ASSERT_EQ(gameOvers.size(), 1u);
+    EXPECT_EQ(gameOvers[0].boardScores, (std::array<int, 2>{1, 0}));
+}
+
+TEST_F(OvertimeTest, W11_WhiteWinsByBoardScore) {
+    start();
+    TimeMs t = 0;
+    for (int i = 0; i < 4; ++i, t += 1000) {
+        ASSERT_TRUE(game->submit(white(3 + i, 9), t).accepted);  // 白方活四
+    }
+    game->tick(kEnd);
+    EXPECT_EQ(view().status, GameStatus::WhiteWon);
+    EXPECT_EQ(view().boardScores, (std::array<int, 2>{0, 3}));
+}
+
+TEST_F(OvertimeTest, W11_EqualBoardScoreIsDraw) {
+    start();
+    game->tick(kLimit);
+    game->tick(kEnd);
+    EXPECT_EQ(view().status, GameStatus::Draw);
+    EXPECT_EQ(view().boardScores, (std::array<int, 2>{0, 0}));
+    EXPECT_EQ(view().timeRemaining, 0);
+    EXPECT_EQ(view().now, kEnd);
+    ASSERT_EQ(gameOvers.size(), 1u);
+    EXPECT_EQ(gameOvers[0].status, GameStatus::Draw);
+    EXPECT_EQ(gameOvers[0].boardScores, (std::array<int, 2>{0, 0}));
+}
+
+TEST_F(OvertimeTest, W10_RequestAtOvertimeEndRejected) {
+    start();
+    game->tick(kLimit);
+    EXPECT_TRUE(game->submit(white(7, 7), kEnd - 1).accepted);
+    EXPECT_EQ(game->submit(white(8, 8), kEnd).reason, RejectReason::GameNotRunning);
+    EXPECT_EQ(view().status, GameStatus::Draw);
+    EXPECT_EQ(gameOvers.size(), 1u);
+}
+
+TEST_F(OvertimeTest, W10_SingleTickPastLimitAndOvertimeEndsGame) {
+    start();
+    game->tick(kLimit - 1000);
+    game->tick(kEnd + 50000);  // 一次跨過時限與延長賽
+    EXPECT_EQ(view().status, GameStatus::Draw);
+    EXPECT_TRUE(view().overtime);
+    EXPECT_EQ(view().now, kEnd);
+    EXPECT_EQ(gameOvers.size(), 1u);
+}
+
+TEST_F(OvertimeTest, W10_OvertimeHappensOnlyOnce) {
+    start();
+    game->tick(kEnd);
+    EXPECT_EQ(view().status, GameStatus::Draw);  // 延長賽後仍同分不會再延長
+    game->tick(kEnd + 60000);
+    EXPECT_EQ(gameOvers.size(), 1u);
+}
+
+TEST_F(OvertimeTest, W10_StateCarriesIntoOvertime) {
+    start();
+    placeBlack({{0, 0}, {1, 0}});
+    ASSERT_TRUE(game->submit(white(5, 5), kLimit - 100).accepted);
+    game->tick(kLimit);
+    const PlayerView v = game->viewFor(PlayerId::White);
+    EXPECT_EQ(v.board.at({0, 0}), Cell::Black);
+    EXPECT_EQ(v.board.at({5, 5}), Cell::White);
+    EXPECT_EQ(v.placeCooldownRemaining, config.placeCooldown - 100);  // 下子間隔延續
+    EXPECT_EQ(game->submit(white(6, 6), kLimit).reason, RejectReason::PlaceCooldown);
+}
+
+TEST_F(OvertimeTest, W10_ScoreTargetModeHasNoOvertime) {
+    config.mode = MatchMode::ScoreTarget;
+    start();
+    game->tick(kEnd * 10);
+    EXPECT_EQ(view().status, GameStatus::Running);
+    EXPECT_FALSE(view().overtime);
+}
+
+TEST_F(OvertimeTest, G4_RestartResetsOvertime) {
+    start();
+    game->tick(kEnd);
+    ASSERT_TRUE(view().boardScores.has_value());
+    game->restart();
+    EXPECT_FALSE(view().overtime);
+    EXPECT_FALSE(view().boardScores.has_value());
+    game->confirmSkill(PlayerId::Black);
+    game->confirmSkill(PlayerId::White);
+    game->tick(kLimit - 1);
+    EXPECT_EQ(view().status, GameStatus::Running);
+    EXPECT_FALSE(view().overtime);
+    EXPECT_EQ(view().timeRemaining, 1);
+}
+
+TEST_F(OvertimeTest, G4_RestartDuringOvertime) {
+    start();
+    game->tick(kLimit + 5000);
+    ASSERT_TRUE(view().overtime);
+    game->restart();
+    game->confirmSkill(PlayerId::Black);
+    game->confirmSkill(PlayerId::White);
+    game->tick(0);
+    EXPECT_FALSE(view().overtime);
+    EXPECT_EQ(view().timeRemaining, kLimit);
 }

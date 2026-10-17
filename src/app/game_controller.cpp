@@ -115,7 +115,10 @@ PlayerView GameController::viewFor(PlayerId player) const {
     view.scores = scores();
     view.mode = config.mode;
     view.targetScore = config.targetScore;
-    view.timeRemaining = std::clamp<TimeMs>(config.timeLimit - std::max<TimeMs>(lastTime, 0), 0, config.timeLimit);
+    const TimeMs period = overtime ? config.overtime : config.timeLimit;
+    view.timeRemaining = std::clamp<TimeMs>(matchEnd() - std::max<TimeMs>(lastTime, 0), 0, period);
+    view.overtime = overtime;
+    view.boardScores = boardScores;
     view.zones = zones.active(lastTime);
     view.lastClearedLines = lastClearedLines;
     return view;
@@ -130,6 +133,8 @@ void GameController::restart() {
     confirmed = {};
     skillRevealed = {};
     lastClearedLines.clear();
+    overtime = false;
+    boardScores.reset();
     lastTime = 0;
     firstAI = PlayerId::Black;
     emit stateChanged();
@@ -159,16 +164,23 @@ void GameController::advanceTo(TimeMs now) {
     if (status != GameStatus::Running) {
         return;
     }
-    const TimeMs target = isTimeLimited() ? std::min(now, config.timeLimit) : now;
-    if (target > lastTime) {
-        for (PlayerState& s : players) {
-            energy.advance(s, lastTime, target);
+    while (status == GameStatus::Running) {
+        const TimeMs target = isTimeLimited() ? std::min(now, matchEnd()) : now;
+        if (target > lastTime) {
+            for (PlayerState& s : players) {
+                energy.advance(s, lastTime, target);
+            }
+            lastTime = target;
+            zones.removeExpired(lastTime);
         }
-        lastTime = target;
-        zones.removeExpired(lastTime);
-    }
-    if (isTimeLimited() && lastTime >= config.timeLimit) {
-        finishByScore();  // W7：時限那一刻（含）之後結束
+        if (!isTimeLimited() || lastTime < matchEnd()) {
+            return;
+        }
+        if (!overtime && players[0].score == players[1].score) {
+            overtime = true;  // W10：同分時延長一次，所有狀態延續；繼續推進到 now
+            continue;
+        }
+        finishByScore();  // W7、W10：時限（或延長賽結束）那一刻（含）之後結束
     }
 }
 
@@ -277,10 +289,24 @@ ActionResult GameController::reject(PlayerId player, RejectReason reason, std::o
 void GameController::finish(GameStatus result) {
     status = result;
     emit stateChanged();
-    emit gameOver(status, scores());
+    emit gameOver(status, scores(), boardScores);
 }
 
+namespace {
+
+GameStatus higherWins(std::array<int, 2> values) {
+    const auto [black, white] = values;
+    return black > white ? GameStatus::BlackWon : white > black ? GameStatus::WhiteWon : GameStatus::Draw;
+}
+
+}  // namespace
+
 void GameController::finishByScore() {
-    const auto [black, white] = scores();
-    finish(black > white ? GameStatus::BlackWon : white > black ? GameStatus::WhiteWon : GameStatus::Draw);  // W9
+    if (scores()[0] != scores()[1]) {
+        finish(higherWins(scores()));  // W9
+        return;
+    }
+    boardScores = std::array<int, 2>{RuleChecker::boardScore(board, PlayerId::Black, config.boardScore),
+                                     RuleChecker::boardScore(board, PlayerId::White, config.boardScore)};
+    finish(higherWins(*boardScores));  // W11：盤面分只用來決勝，不加進分數
 }

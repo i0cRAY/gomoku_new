@@ -181,7 +181,7 @@
 - [x] **T17g 盤面分計算** `RuleChecker::boardScore`　規格：W11
     - `config.h` 新增 `BoardScoreConfig`（design §3.1）
     - 測試：活四、衝四、活三各自的分數；兩端是空格、邊界、已摧毀、對手棋子時的判定；禁區算空格（Board 裡沒有禁區，測試註明即可）；四個方向都要測；跳形（`●●_●●`、`_●●_●_`）不算；兩端都擋住的四、眠三不算；一顆子在兩個方向各自算分；空盤為 0
-- [ ] **T17h 延長賽與決勝**　規格：W4、W7、W9、W10、W11
+- [x] **T17h 延長賽與決勝**　規格：W4、W7、W9、W10、W11
     - `MatchConfig` 新增 `overtime`、`boardScore`；`PlayerView` 新增 `overtime`、`boardScores`；`gameOver` 多帶 `boardScores`（design §4.6）
     - 測試：時限到時不同分 → 結束，`boardScores` 沒有值；同分 → 不結束、`overtime` 為 true、`timeRemaining` 從 60000 開始倒數；延長賽中可以照常下子、計分；延長時間到時分數高者勝；仍同分時盤面分高者勝、盤面分相同為和局，`boardScores` 有值；延長賽結束那一刻之後的請求以 `GAME_NOT_RUNNING` 拒絕；`tick` 跨過時限與延長時間都會正確處理；棋盤下滿且同分時不進延長賽、直接比盤面分（包括延長賽中棋盤下滿）；達分模式不受影響；再來一局後 `overtime` 重置
 - [ ] **T17i 延長賽與盤面分的介面**　規格：U6、U8
