@@ -152,9 +152,8 @@ struct AIConfig {
 
 // spec W11：盤面分，只用來決勝 ⚠️待確認
 struct BoardScoreConfig {
-    int openFour = 3;
-    int closedFour = 2;
-    int openThree = 1;
+    int four = 2;   // 剛好連續 4 子
+    int three = 1;  // 剛好連續 3 子
 };
 
 struct MatchConfig {
@@ -204,8 +203,8 @@ public:
     // 回傳剛下在 last 的那顆子在每個方向形成的連線（≥ minLength 顆），每個方向各一條；沒有則回傳空 vector
     // 交叉時 last 會同時出現在多條線裡（W6）
     static std::vector<std::vector<Pos>> findLines(const Board&, Pos last, int minLength);
-    // spec W11：player 在盤面上的棋型分數（活四、衝四、活三），掃描整個棋盤的四個方向
-    // 只算剛好連續 3、4 子的段；邊界、Destroyed 與對手棋子算擋住，禁區不在 Board 裡所以自然算空格
+    // spec W11：player 在盤面上的棋型分數（連四、連三），掃描整個棋盤的四個方向
+    // 只算剛好連續 3、4 子的段，不看兩端；Destroyed 與對手棋子會截斷連續
     static int boardScore(const Board&, PlayerId, const BoardScoreConfig&);
 };
 ```

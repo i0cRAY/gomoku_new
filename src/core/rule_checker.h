@@ -13,8 +13,7 @@ public:
     // 長連回傳整條（W2）；交叉時 last 會同時出現在多條線裡（W6）。已摧毀的格子與對手棋子一樣會截斷連線（B4）。
     static std::vector<std::vector<Pos>> findLines(const Board&, Pos last, int minLength);
 
-    // spec W11：player 在盤面上的棋型分數（活四、衝四、活三），掃描整個棋盤的四個方向。
-    // 只算剛好連續 3、4 子的段，跳形不算；邊界、已摧毀的格子與對手棋子算擋住。
-    // 禁區不在 Board 裡，所以自然算空格。
+    // spec W11：player 在盤面上的棋型分數（連四、連三），掃描整個棋盤的四個方向。
+    // 只算剛好連續 3、4 子的段，不看兩端，跳形不算；已摧毀的格子與對手棋子會截斷連續。
     static int boardScore(const Board&, PlayerId, const BoardScoreConfig&);
 };

@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <string>
 #include <vector>
 
 #include "board_test_util.h"
@@ -145,8 +146,7 @@ TEST(RuleCheckerTest, B4_DestroyedLastCellHasNoLine) {
     EXPECT_TRUE(RuleChecker::findLines(board, {0, 0}, kLen).empty());
 }
 
-// ---- 盤面分（spec W11）----
-// 禁區不存在 Board 裡（由 ZoneMap 管理），所以 boardScore 自然把禁區當空格，不另外測。
+// ---- 盤面分（spec W11）：只看剛好連續 3、4 子，不看兩端 ----
 
 namespace {
 
@@ -161,34 +161,28 @@ TEST(BoardScoreTest, W11_EmptyBoardIsZero) {
     EXPECT_EQ(RuleChecker::boardScore(Board{}, PlayerId::White, {}), 0);
 }
 
-TEST(BoardScoreTest, W11_OpenFour) {
-    EXPECT_EQ(blackScore(boardFromRows({"...XXXX..."})), 3);
+TEST(BoardScoreTest, W11_FourScoresTwo) {
+    EXPECT_EQ(blackScore(boardFromRows({"...XXXX..."})), 2);
 }
 
-TEST(BoardScoreTest, W11_ClosedFourBlockedByEdge) {
-    EXPECT_EQ(blackScore(boardFromRows({"XXXX..."})), 2);
-    EXPECT_EQ(blackScore(boardFromRows({"...........XXXX"})), 2);
-}
-
-TEST(BoardScoreTest, W11_ClosedFourBlockedByOpponent) {
-    EXPECT_EQ(blackScore(boardFromRows({"..OXXXX..."})), 2);
-}
-
-TEST(BoardScoreTest, W11_ClosedFourBlockedByDestroyed) {
-    EXPECT_EQ(blackScore(boardFromRows({"..#XXXX..."})), 2);
-}
-
-TEST(BoardScoreTest, W11_FourBlockedOnBothEndsIsZero) {
-    EXPECT_EQ(blackScore(boardFromRows({"..OXXXX#.."})), 0);
-}
-
-TEST(BoardScoreTest, W11_OpenThree) {
+TEST(BoardScoreTest, W11_ThreeScoresOne) {
     EXPECT_EQ(blackScore(boardFromRows({"...XXX...."})), 1);
 }
 
-TEST(BoardScoreTest, W11_ClosedThreeIsZero) {
-    EXPECT_EQ(blackScore(boardFromRows({"..OXXX...."})), 0);
-    EXPECT_EQ(blackScore(boardFromRows({"XXX......."})), 0);
+TEST(BoardScoreTest, W11_EndsDoNotMatter) {
+    EXPECT_EQ(blackScore(boardFromRows({"XXXX..."})), 2);              // 邊界
+    EXPECT_EQ(blackScore(boardFromRows({"...........XXXX"})), 2);
+    EXPECT_EQ(blackScore(boardFromRows({"..OXXXX..."})), 2);           // 對手
+    EXPECT_EQ(blackScore(boardFromRows({"..#XXXX..."})), 2);           // 已摧毀
+    EXPECT_EQ(blackScore(boardFromRows({"..OXXXX#.."})), 2);           // 兩端都擋住也算
+    EXPECT_EQ(blackScore(boardFromRows({"..OXXX#..."})), 1);
+    EXPECT_EQ(blackScore(boardFromRows({"XXX......."})), 1);
+}
+
+TEST(BoardScoreTest, W11_OpponentAndDestroyedBreakTheRun) {
+    EXPECT_EQ(blackScore(boardFromRows({"XXOXX....."})), 0);
+    EXPECT_EQ(blackScore(boardFromRows({"XX#XX....."})), 0);
+    EXPECT_EQ(blackScore(boardFromRows({"XXX#XXXX.."})), 1 + 2);
 }
 
 TEST(BoardScoreTest, W11_TwoStonesIsZero) {
@@ -202,15 +196,15 @@ TEST(BoardScoreTest, W11_JumpShapesAreZero) {
 
 TEST(BoardScoreTest, W11_AllFourDirections) {
     const Board vertical = boardFromRows({".", ".", "X", "X", "X", "X", "."});
-    EXPECT_EQ(blackScore(vertical), 3);
+    EXPECT_EQ(blackScore(vertical), 2);
     const Board diagonalDown = boardFromRows({".", ".X", "..X", "...X", "....X", "....."});
-    EXPECT_EQ(blackScore(diagonalDown), 3);
+    EXPECT_EQ(blackScore(diagonalDown), 2);
     const Board diagonalUp = boardFromRows({".....", "....X", "...X", "..X", ".X", "."});
-    EXPECT_EQ(blackScore(diagonalUp), 3);
+    EXPECT_EQ(blackScore(diagonalUp), 2);
 }
 
 TEST(BoardScoreTest, W11_StoneCountsInEachDirection) {
-    // (4, 3) 同時在橫向活三與直向活三裡
+    // (4, 3) 同時在橫向連三與直向連三裡
     const Board board = boardFromRows({
         "..........",
         "..........",
@@ -230,24 +224,41 @@ TEST(BoardScoreTest, W11_PatternsAddUp) {
         "..........",
         "...XXX....",
     });
-    EXPECT_EQ(blackScore(board), 3 + 2 + 1);
+    EXPECT_EQ(blackScore(board), 2 + 2 + 1);
 }
 
 TEST(BoardScoreTest, W11_OnlyCountsOwnStones) {
     const Board board = boardFromRows({"..OOOO....", "..........", "...XXX...."});
     EXPECT_EQ(blackScore(board), 1);
-    EXPECT_EQ(RuleChecker::boardScore(board, PlayerId::White, {}), 3);
+    EXPECT_EQ(RuleChecker::boardScore(board, PlayerId::White, {}), 2);
+}
+
+TEST(BoardScoreTest, W11_FullBoardStillScores) {
+    // 每列依 XXXOOO… 重複、隔列錯開：橫向全是連三，直向與斜向最多連 2 或 1 子；沒有任何空格
+    std::vector<std::string> rows;
+    for (int y = 0; y < Board::kSize; ++y) {
+        std::string row;
+        for (int x = 0; x < Board::kSize; ++x) {
+            row += ((x / 3) + y) % 2 == 0 ? 'X' : 'O';
+        }
+        rows.push_back(row);
+    }
+    const Board board = boardFromRowRange(rows);
+    ASSERT_TRUE(board.isFull());
+    const int black = blackScore(board);
+    const int white = RuleChecker::boardScore(board, PlayerId::White, {});
+    EXPECT_GT(black, 0);
+    EXPECT_NE(black, white);  // 下滿時也能分出高下
 }
 
 TEST(BoardScoreTest, W11_UsesConfigValues) {
-    const BoardScoreConfig config{10, 5, 2};
-    const Board board = boardFromRows({".XXXX.....", "..........", "OXXXX.....", "..........", ".XXX......"});
-    EXPECT_EQ(blackScore(board, config), 10 + 5 + 2);
+    const BoardScoreConfig config{10, 3};
+    const Board board = boardFromRows({".XXXX.....", "..........", "OXXXX#....", "..........", ".XXX......"});
+    EXPECT_EQ(blackScore(board, config), 10 + 10 + 3);
 }
 
 TEST(BoardScoreTest, W11_DefaultConfig) {
     const BoardScoreConfig config;
-    EXPECT_EQ(config.openFour, 3);
-    EXPECT_EQ(config.closedFour, 2);
-    EXPECT_EQ(config.openThree, 1);
+    EXPECT_EQ(config.four, 2);
+    EXPECT_EQ(config.three, 1);
 }

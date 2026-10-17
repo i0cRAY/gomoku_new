@@ -299,7 +299,7 @@ TEST_F(OvertimeTest, W11_TieAfterOvertimeDecidedByBoardScore) {
     start();
     ASSERT_TRUE(game->submit(white(3, 9), 0).accepted);
     ASSERT_TRUE(game->submit(white(4, 9), 1000).accepted);  // 白方兩子不算分
-    placeBlack({{3, 3}, {4, 3}, {5, 3}}, 1000);             // 黑方活三
+    placeBlack({{3, 3}, {4, 3}, {5, 3}}, 1000);             // 黑方連三
     game->tick(kLimit);
     ASSERT_TRUE(view().overtime);
     game->tick(kEnd);
@@ -314,11 +314,11 @@ TEST_F(OvertimeTest, W11_WhiteWinsByBoardScore) {
     start();
     TimeMs t = 0;
     for (int i = 0; i < 4; ++i, t += 1000) {
-        ASSERT_TRUE(game->submit(white(3 + i, 9), t).accepted);  // 白方活四
+        ASSERT_TRUE(game->submit(white(3 + i, 9), t).accepted);  // 白方連四
     }
     game->tick(kEnd);
     EXPECT_EQ(view().status, GameStatus::WhiteWon);
-    EXPECT_EQ(view().boardScores, (std::array<int, 2>{0, 3}));
+    EXPECT_EQ(view().boardScores, (std::array<int, 2>{0, 2}));
 }
 
 TEST_F(OvertimeTest, W11_EqualBoardScoreIsDraw) {

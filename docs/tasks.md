@@ -178,9 +178,10 @@
     - `MatchConfig::startEnergy` 預設改為 3
     - 測試：預設值為 3；開局（時間 0）能量為 3；再來一局後也回到 3
     - 原本假設開局 1 格的測試（註解寫「開局能量 1」的那幾個），改成在測試裡明確設定 `startEnergy = 1`，維持原本要測的內容
-- [x] **T17g 盤面分計算** `RuleChecker::boardScore`　規格：W11
+- [x] 🔄 **T17g 盤面分計算** `RuleChecker::boardScore`　規格：W11
     - `config.h` 新增 `BoardScoreConfig`（design §3.1）
     - 測試：活四、衝四、活三各自的分數；兩端是空格、邊界、已摧毀、對手棋子時的判定；禁區算空格（Board 裡沒有禁區，測試註明即可）；四個方向都要測；跳形（`●●_●●`、`_●●_●_`）不算；兩端都擋住的四、眠三不算；一顆子在兩個方向各自算分；空盤為 0
+    - 🔄 變更（W11 改為不看兩端）：`BoardScoreConfig` 改成 `four = 2`、`three = 1`；原本「兩端都擋住的四、眠三不算分」的測試改成「也算分」；活四、衝四、活三的測試改成連四 2 分、連三 1 分；新增「棋盤下滿時仍能算出盤面分」的測試。T17h 的 `W11_WhiteWinsByBoardScore` 預期值從 `{0, 3}` 改成 `{0, 2}`
 - [x] **T17h 延長賽與決勝**　規格：W4、W7、W9、W10、W11
     - `MatchConfig` 新增 `overtime`、`boardScore`；`PlayerView` 新增 `overtime`、`boardScores`；`gameOver` 多帶 `boardScores`（design §4.6）
     - 測試：時限到時不同分 → 結束，`boardScores` 沒有值；同分 → 不結束、`overtime` 為 true、`timeRemaining` 從 60000 開始倒數；延長賽中可以照常下子、計分；延長時間到時分數高者勝；仍同分時盤面分高者勝、盤面分相同為和局，`boardScores` 有值；延長賽結束那一刻之後的請求以 `GAME_NOT_RUNNING` 拒絕；`tick` 跨過時限與延長時間都會正確處理；棋盤下滿且同分時不進延長賽、直接比盤面分（包括延長賽中棋盤下滿）；達分模式不受影響；再來一局後 `overtime` 重置

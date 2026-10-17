@@ -47,9 +47,8 @@ struct AIConfig {
 
 // spec W11：盤面分，只用來決勝 ⚠️待確認
 struct BoardScoreConfig {
-    int openFour = 3;
-    int closedFour = 2;
-    int openThree = 1;
+    int four = 2;   // 剛好連續 4 子
+    int three = 1;  // 剛好連續 3 子
 };
 
 struct MatchConfig {

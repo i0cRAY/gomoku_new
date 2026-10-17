@@ -22,10 +22,6 @@ void collect(const Board& board, Pos last, Cell color, int dx, int dy, std::vect
     }
 }
 
-bool isEmpty(const Board& board, Pos p) {
-    return board.inBounds(p) && board.at(p) == Cell::Empty;
-}
-
 }  // namespace
 
 std::vector<std::vector<Pos>> RuleChecker::findLines(const Board& board, Pos last, int minLength) {
@@ -63,13 +59,10 @@ int RuleChecker::boardScore(const Board& board, PlayerId player, const BoardScor
                     ++length;
                     after = Pos{after.x + d.dx, after.y + d.dy};
                 }
-                const int openEnds = (isEmpty(board, before) ? 1 : 0) + (isEmpty(board, after) ? 1 : 0);
-                if (length == 4 && openEnds == 2) {
-                    total += config.openFour;
-                } else if (length == 4 && openEnds == 1) {
-                    total += config.closedFour;
-                } else if (length == 3 && openEnds == 2) {
-                    total += config.openThree;
+                if (length == 4) {
+                    total += config.four;
+                } else if (length == 3) {
+                    total += config.three;
                 }
             }
         }

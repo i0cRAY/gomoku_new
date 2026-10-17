@@ -51,7 +51,7 @@ TEST(ConfigTest, G1b_SZ_SX_NewDefaultsMatchSpec) {
     EXPECT_EQ(config.targetScore, 20);
     EXPECT_FALSE(config.showAiInfo);
     EXPECT_EQ(config.overtime, 60000);  // W10
-    EXPECT_EQ(config.boardScore.openFour, 3);  // W11
+    EXPECT_EQ(config.boardScore.four, 2);  // W11
     EXPECT_EQ(config.skill.dominateStones, 3);
     EXPECT_EQ(config.skill.zoneDuration, 3000);
     EXPECT_EQ(config.skill.destroyRadius, 2);  // 5×5
