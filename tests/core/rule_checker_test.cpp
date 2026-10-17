@@ -144,3 +144,110 @@ TEST(RuleCheckerTest, B4_DestroyedLastCellHasNoLine) {
     const Board board = boardFromRows({"#"});
     EXPECT_TRUE(RuleChecker::findLines(board, {0, 0}, kLen).empty());
 }
+
+// ---- 盤面分（spec W11）----
+// 禁區不存在 Board 裡（由 ZoneMap 管理），所以 boardScore 自然把禁區當空格，不另外測。
+
+namespace {
+
+int blackScore(const Board& board, const BoardScoreConfig& config = {}) {
+    return RuleChecker::boardScore(board, PlayerId::Black, config);
+}
+
+}  // namespace
+
+TEST(BoardScoreTest, W11_EmptyBoardIsZero) {
+    EXPECT_EQ(blackScore(Board{}), 0);
+    EXPECT_EQ(RuleChecker::boardScore(Board{}, PlayerId::White, {}), 0);
+}
+
+TEST(BoardScoreTest, W11_OpenFour) {
+    EXPECT_EQ(blackScore(boardFromRows({"...XXXX..."})), 3);
+}
+
+TEST(BoardScoreTest, W11_ClosedFourBlockedByEdge) {
+    EXPECT_EQ(blackScore(boardFromRows({"XXXX..."})), 2);
+    EXPECT_EQ(blackScore(boardFromRows({"...........XXXX"})), 2);
+}
+
+TEST(BoardScoreTest, W11_ClosedFourBlockedByOpponent) {
+    EXPECT_EQ(blackScore(boardFromRows({"..OXXXX..."})), 2);
+}
+
+TEST(BoardScoreTest, W11_ClosedFourBlockedByDestroyed) {
+    EXPECT_EQ(blackScore(boardFromRows({"..#XXXX..."})), 2);
+}
+
+TEST(BoardScoreTest, W11_FourBlockedOnBothEndsIsZero) {
+    EXPECT_EQ(blackScore(boardFromRows({"..OXXXX#.."})), 0);
+}
+
+TEST(BoardScoreTest, W11_OpenThree) {
+    EXPECT_EQ(blackScore(boardFromRows({"...XXX...."})), 1);
+}
+
+TEST(BoardScoreTest, W11_ClosedThreeIsZero) {
+    EXPECT_EQ(blackScore(boardFromRows({"..OXXX...."})), 0);
+    EXPECT_EQ(blackScore(boardFromRows({"XXX......."})), 0);
+}
+
+TEST(BoardScoreTest, W11_TwoStonesIsZero) {
+    EXPECT_EQ(blackScore(boardFromRows({"...XX....."})), 0);
+}
+
+TEST(BoardScoreTest, W11_JumpShapesAreZero) {
+    EXPECT_EQ(blackScore(boardFromRows({"..XX.XX..."})), 0);
+    EXPECT_EQ(blackScore(boardFromRows({"..XX.X...."})), 0);
+}
+
+TEST(BoardScoreTest, W11_AllFourDirections) {
+    const Board vertical = boardFromRows({".", ".", "X", "X", "X", "X", "."});
+    EXPECT_EQ(blackScore(vertical), 3);
+    const Board diagonalDown = boardFromRows({".", ".X", "..X", "...X", "....X", "....."});
+    EXPECT_EQ(blackScore(diagonalDown), 3);
+    const Board diagonalUp = boardFromRows({".....", "....X", "...X", "..X", ".X", "."});
+    EXPECT_EQ(blackScore(diagonalUp), 3);
+}
+
+TEST(BoardScoreTest, W11_StoneCountsInEachDirection) {
+    // (4, 3) 同時在橫向活三與直向活三裡
+    const Board board = boardFromRows({
+        "..........",
+        "..........",
+        "....X.....",
+        "...XXX....",
+        "....X.....",
+        "..........",
+    });
+    EXPECT_EQ(blackScore(board), 2);
+}
+
+TEST(BoardScoreTest, W11_PatternsAddUp) {
+    const Board board = boardFromRows({
+        ".XXXX.....",
+        "..........",
+        "..OXXXX...",
+        "..........",
+        "...XXX....",
+    });
+    EXPECT_EQ(blackScore(board), 3 + 2 + 1);
+}
+
+TEST(BoardScoreTest, W11_OnlyCountsOwnStones) {
+    const Board board = boardFromRows({"..OOOO....", "..........", "...XXX...."});
+    EXPECT_EQ(blackScore(board), 1);
+    EXPECT_EQ(RuleChecker::boardScore(board, PlayerId::White, {}), 3);
+}
+
+TEST(BoardScoreTest, W11_UsesConfigValues) {
+    const BoardScoreConfig config{10, 5, 2};
+    const Board board = boardFromRows({".XXXX.....", "..........", "OXXXX.....", "..........", ".XXX......"});
+    EXPECT_EQ(blackScore(board, config), 10 + 5 + 2);
+}
+
+TEST(BoardScoreTest, W11_DefaultConfig) {
+    const BoardScoreConfig config;
+    EXPECT_EQ(config.openFour, 3);
+    EXPECT_EQ(config.closedFour, 2);
+    EXPECT_EQ(config.openThree, 1);
+}

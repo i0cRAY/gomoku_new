@@ -45,6 +45,13 @@ struct AIConfig {
     PatternScores scores;
 };
 
+// spec W11：盤面分，只用來決勝 ⚠️待確認
+struct BoardScoreConfig {
+    int openFour = 3;
+    int closedFour = 2;
+    int openThree = 1;
+};
+
 struct MatchConfig {
     TimeMs regenInterval = 2000;  // spec §4：500–10000 且為 500 的倍數
     int maxEnergy = 10;
