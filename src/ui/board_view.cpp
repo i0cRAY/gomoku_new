@@ -11,11 +11,12 @@
 #include "ui/board_geometry.h"
 #include "ui/board_overlay.h"
 
-// U13、U14：爆炸與大笑的資源檔編在靜態函式庫裡，要手動初始化，否則連結時會被丟掉。
+// U13、U14：爆炸、大笑與靜音的資源檔編在靜態函式庫裡，要手動初始化，否則連結時會被丟掉。
 // Q_INIT_RESOURCE 不能放在具名或匿名 namespace 裡
 static void initEffectResources() {
     Q_INIT_RESOURCE(explosion);
     Q_INIT_RESOURCE(laugh);
+    Q_INIT_RESOURCE(silence);
 }
 
 namespace {
@@ -68,6 +69,8 @@ BoardView::BoardView(QWidget* parent) : QWidget(parent) {
     }
     laughSound.setSource(QUrl(QStringLiteral("qrc:/laugh.wav")));
     laughSound.setLoopCount(QSoundEffect::Infinite);
+    keepAliveSound.setSource(QUrl(QStringLiteral("qrc:/silence.wav")));
+    keepAliveSound.setLoopCount(QSoundEffect::Infinite);
     animation.setInterval(kAnimationIntervalMs);
     connect(&animation, &QTimer::timeout, this, [this] {
         flashes.erase(std::remove_if(flashes.begin(), flashes.end(),
@@ -93,6 +96,11 @@ void BoardView::startAnimation() {
 }
 
 void BoardView::setView(const PlayerView& newView) {
+    if (audioKeepAlive(newView) && !keepAliveSound.isPlaying()) {
+        keepAliveSound.play();
+    } else if (!audioKeepAlive(newView)) {
+        keepAliveSound.stop();
+    }
     // U13：新出現的已摧毀格子代表剛有人用了摧毀
     if (!newlyDestroyedCells(view.board, newView.board).empty()) {
         explosionStarted.emplace();

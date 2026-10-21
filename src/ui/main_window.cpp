@@ -231,6 +231,7 @@ void MainWindow::backToMenu() {
         session->leave();
     }
     session.reset();
+    board->setView(PlayerView{});  // 停止禁區笑聲等仍在播放的音效（U14）
     for (BoardInput& i : inputs) {
         i.cancel();
     }
@@ -249,6 +250,7 @@ void MainWindow::refresh() {
         if (enteredSkillSelect) {
             skillPage->reset(localPlayers, lastConfirmed);
         }
+        board->setView(view);  // 停止禁區笑聲等仍在播放的音效（U14）
         pages->setCurrentWidget(skillPage);
         return;
     }

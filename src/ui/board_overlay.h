@@ -44,3 +44,5 @@ std::optional<int> explosionFrame(TimeMs elapsed);
 int laughFrame(TimeMs elapsed);
 // U14：對局進行中且還有未到期的禁區時，播放大笑動畫與笑聲（zones 只含未到期的禁區，SZ4）
 bool laughActive(const PlayerView&);
+// U13、U14：倒數與對局進行中維持無聲串流，避免輸出裝置（例如藍牙）閒置暫停後吃掉音效開頭
+bool audioKeepAlive(const PlayerView&);

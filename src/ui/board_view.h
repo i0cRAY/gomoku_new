@@ -63,5 +63,6 @@ private:
     std::optional<QElapsedTimer> laughStarted;  // U14：正在播放禁區大笑時才有值
     std::vector<QPixmap> laughFrames;
     QSoundEffect laughSound;
+    QSoundEffect keepAliveSound;  // 無聲，只用來讓輸出裝置保持喚醒
     QTimer animation;
 };

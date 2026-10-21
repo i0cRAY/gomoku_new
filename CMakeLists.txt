@@ -61,6 +61,7 @@ add_library(gomoku_ui STATIC
     src/ui/main_window.cpp
     resources/explosion.qrc
     resources/laugh.qrc
+    resources/silence.qrc
 )
 set_target_properties(gomoku_ui PROPERTIES AUTOMOC ON AUTORCC ON)
 target_link_libraries(gomoku_ui PUBLIC gomoku_app Qt6::Widgets Qt6::Multimedia)

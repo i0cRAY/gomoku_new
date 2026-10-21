@@ -83,3 +83,7 @@ int laughFrame(TimeMs elapsed) {
 bool laughActive(const PlayerView& view) {
     return view.status == GameStatus::Running && !view.zones.empty();
 }
+
+bool audioKeepAlive(const PlayerView& view) {
+    return view.status == GameStatus::Countdown || view.status == GameStatus::Running;
+}

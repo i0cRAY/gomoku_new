@@ -1,0 +1,6 @@
+<!-- U13、U14：維持輸出裝置喚醒用的 1 秒靜音（ffmpeg -f lavfi -i anullsrc=r=44100:cl=mono -t 1 -c:a pcm_s16le silence.wav） -->
+<RCC>
+    <qresource prefix="/">
+        <file>silence.wav</file>
+    </qresource>
+</RCC>

@@ -139,3 +139,17 @@ TEST(BoardOverlayTest, U14_LaughStopsWhenGameEnds) {
         EXPECT_FALSE(laughActive(view));
     }
 }
+
+// U13、U14：倒數與對局進行中維持無聲串流，讓輸出裝置不會暫停而吃掉音效開頭
+TEST(BoardOverlayTest, U13_U14_AudioKeepAliveDuringCountdownAndRunning) {
+    PlayerView view;
+    for (GameStatus status : {GameStatus::Countdown, GameStatus::Running}) {
+        view.status = status;
+        EXPECT_TRUE(audioKeepAlive(view));
+    }
+    for (GameStatus status : {GameStatus::SkillSelect, GameStatus::BlackWon, GameStatus::WhiteWon, GameStatus::Draw,
+                              GameStatus::Aborted}) {
+        view.status = status;
+        EXPECT_FALSE(audioKeepAlive(view));
+    }
+}
