@@ -133,6 +133,7 @@ TEST(MenuModelTest, U7_DominateDescription) {
     const std::string text = skillDescription(SkillId::Dominate, SkillConfig{});
     EXPECT_NE(text.find("3 顆"), std::string::npos);
     EXPECT_NE(text.find("3 秒"), std::string::npos);
+    EXPECT_NE(text.find("周圍 3×3"), std::string::npos);  // SZ2
     EXPECT_NE(text.find("消耗 1 格能量"), std::string::npos);
 }
 

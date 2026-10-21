@@ -80,11 +80,13 @@ void SkillSystem::onPlaced(PlayerId player, PlayerState& state, Pos pos, ZoneMap
         return;
     }
     --state.dominateCharges;
-    constexpr Pos kNeighbors[] = {{0, -1}, {0, 1}, {-1, 0}, {1, 0}};  // 上下左右
-    for (Pos d : kNeighbors) {
-        const Pos p{pos.x + d.x, pos.y + d.y};
-        if (p.x >= 0 && p.x < Board::kSize && p.y >= 0 && p.y < Board::kSize) {
-            zones.add(p, player, now + config.zoneDuration);
+    for (int dy = -config.zoneRadius; dy <= config.zoneRadius; ++dy) {
+        for (int dx = -config.zoneRadius; dx <= config.zoneRadius; ++dx) {
+            const Pos p{pos.x + dx, pos.y + dy};
+            const bool center = dx == 0 && dy == 0;
+            if (!center && p.x >= 0 && p.x < Board::kSize && p.y >= 0 && p.y < Board::kSize) {
+                zones.add(p, player, now + config.zoneDuration);
+            }
         }
     }
 }

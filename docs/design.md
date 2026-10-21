@@ -140,6 +140,7 @@ struct SkillConfig {
     int bombSize = 2;                    // spec SB3：以目標為左上角的 2×2
     int dominateStones = 3;              // spec SZ1
     TimeMs zoneDuration = 3000;          // spec SZ2
+    int zoneRadius = 1;                  // spec SZ2：中心 ±1 的 3×3，不含中心
     int destroyRadius = 2;               // spec SX2：5×5 = 中心 ±2
     int costOf(SkillId) const;           // spec S2：規則檢查、HUD、AI 共用
 };
@@ -253,7 +254,7 @@ public:
     std::optional<RejectReason> check(const SkillAction&, const PlayerState&, const Board&) const;
     // 呼叫前必須先通過 check。扣能量（S2）由呼叫端透過 EnergyManager 處理，才能套用 E4 的回能規則
     void apply(const SkillAction&, PlayerState&, Board&, ZoneMap&, TimeMs now) const;
-    // 霸道：成功下子後由 GameController 呼叫；次數 > 0 時扣 1 並在 zones 加入十字形禁區（SZ2）
+    // 霸道：成功下子後由 GameController 呼叫；次數 > 0 時扣 1 並在 zones 加入周圍 8 格（3×3）的禁區（SZ2）
     void onPlaced(PlayerId, PlayerState&, Pos, ZoneMap&, TimeMs now) const;
 };
 ```

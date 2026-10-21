@@ -108,18 +108,18 @@ TEST_F(DominateTest, SZ1_TargetIsIgnored) {
     EXPECT_EQ(skills.check(withTarget, state, board), std::nullopt);
 }
 
-TEST_F(DominateTest, SZ2_PlacingConsumesChargeAndCreatesCrossZone) {
+TEST_F(DominateTest, SZ2_PlacingConsumesChargeAndCreatesThreeByThreeZone) {
     skills.apply(dominate(), state, board, zones, kReady);
     skills.onPlaced(PlayerId::Black, state, {7, 7}, zones, 21000);
     EXPECT_EQ(state.dominateCharges, 2);
     const auto active = zones.active(21000);
-    ASSERT_EQ(active.size(), 4u);
-    for (Pos p : {Pos{7, 6}, Pos{7, 8}, Pos{6, 7}, Pos{8, 7}}) {
-        EXPECT_TRUE(containsPos(active, p));
+    ASSERT_EQ(active.size(), 8u);
+    for (Pos p : {Pos{6, 6}, Pos{7, 6}, Pos{8, 6}, Pos{6, 7}, Pos{8, 7}, Pos{6, 8}, Pos{7, 8}, Pos{8, 8}}) {
+        EXPECT_TRUE(containsPos(active, p));  // 斜角也算
         EXPECT_TRUE(zones.isRestricted(p, PlayerId::White, 21000));
     }
-    EXPECT_FALSE(containsPos(active, {7, 7}));
-    EXPECT_FALSE(containsPos(active, {8, 8}));  // 斜角不算
+    EXPECT_FALSE(containsPos(active, {7, 7}));  // 中心不算
+    EXPECT_FALSE(containsPos(active, {9, 7}));  // 距離 2 不算
     for (const ZoneCell& z : active) {
         EXPECT_EQ(z.owner, PlayerId::Black);
         EXPECT_EQ(z.expiresAt, 21000 + config.zoneDuration);
@@ -130,9 +130,10 @@ TEST_F(DominateTest, SZ2_CornerZoneClippedToBoard) {
     skills.apply(dominate(), state, board, zones, kReady);
     skills.onPlaced(PlayerId::Black, state, {0, 0}, zones, 21000);
     const auto active = zones.active(21000);
-    ASSERT_EQ(active.size(), 2u);
+    ASSERT_EQ(active.size(), 3u);
     EXPECT_TRUE(containsPos(active, {1, 0}));
     EXPECT_TRUE(containsPos(active, {0, 1}));
+    EXPECT_TRUE(containsPos(active, {1, 1}));
 }
 
 TEST_F(DominateTest, SZ2_OnlyThreeStonesCreateZones) {

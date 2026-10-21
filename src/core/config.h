@@ -13,6 +13,7 @@ struct SkillConfig {
     int bombSize = 2;             // spec SB3：以目標為左上角的 2×2
     int dominateStones = 3;       // spec SZ1
     TimeMs zoneDuration = 3000;   // spec SZ2
+    int zoneRadius = 1;           // spec SZ2：中心 ±1 的 3×3，不含中心
     int destroyRadius = 2;        // spec SX2：5×5 = 中心 ±2
 
     // spec S2：規則檢查、HUD、AI 共用
