@@ -23,6 +23,11 @@ BoardGeometry::Point BoardGeometry::cellCenter(Pos p) const {
     return Point{originX + p.x * cell, originY + p.y * cell};
 }
 
+BoardGeometry::Square BoardGeometry::boardArea() const {
+    return Square{originX - cell * kMarginCells, originY - cell * kMarginCells,
+                  cell * (Board::kSize - 1 + 2 * kMarginCells)};
+}
+
 std::optional<Pos> BoardGeometry::pixelToCell(double x, double y) const {
     if (cell <= 0.0) {
         return std::nullopt;

@@ -9,7 +9,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-find_package(Qt6 REQUIRED COMPONENTS Core Network Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Core Network Widgets Multimedia)
 
 # 邏輯層 + 資料層：純 C++，不得連結任何 Qt（design §2.1）
 add_library(gomoku_core STATIC
@@ -59,9 +59,10 @@ add_library(gomoku_ui STATIC
     src/ui/skill_select_view.cpp
     src/ui/main_window.h
     src/ui/main_window.cpp
+    resources/explosion.qrc
 )
-set_target_properties(gomoku_ui PROPERTIES AUTOMOC ON)
-target_link_libraries(gomoku_ui PUBLIC gomoku_app Qt6::Widgets)
+set_target_properties(gomoku_ui PROPERTIES AUTOMOC ON AUTORCC ON)
+target_link_libraries(gomoku_ui PUBLIC gomoku_app Qt6::Widgets Qt6::Multimedia)
 
 # 主程式
 add_executable(gomoku

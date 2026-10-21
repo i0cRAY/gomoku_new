@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <tuple>
 
+#include "core/board.h"
 #include "ui/board_overlay.h"
 
 TEST(BoardOverlayTest, U3_DestroyPreviewCenteredOnTarget) {
@@ -70,4 +71,45 @@ TEST(BoardOverlayTest, U11_LabelAtMiddleStoneOfFirstLine) {
 
 TEST(BoardOverlayTest, U11_FlashLastsAbout500Ms) {
     EXPECT_EQ(kClearFlashDurationMs, 500);
+}
+
+namespace {
+
+Board destroyArea(Board board, Pos center, int radius) {
+    for (Pos p : areaCells(center, SkillArea{radius, radius})) {
+        board.set(p, Cell::Destroyed);
+    }
+    return board;
+}
+
+}  // namespace
+
+TEST(BoardOverlayTest, U13_NewlyDestroyedCellsOnly) {
+    Board before;
+    before.set({1, 1}, Cell::Destroyed);  // 之前就摧毀的不算
+    before.set({7, 7}, Cell::Black);
+    Board after = before;
+    after.set({7, 7}, Cell::Destroyed);
+    after.set({8, 7}, Cell::Destroyed);
+    after.set({9, 9}, Cell::White);  // 下子不算
+    EXPECT_EQ(newlyDestroyedCells(before, after), (std::vector<Pos>{{7, 7}, {8, 7}}));
+    EXPECT_TRUE(newlyDestroyedCells(after, after).empty());
+}
+
+TEST(BoardOverlayTest, U13_RematchClearIsNotDestroy) {
+    const Board destroyed = destroyArea(Board{}, {7, 7}, 2);
+    EXPECT_TRUE(newlyDestroyedCells(destroyed, Board{}).empty());
+}
+
+TEST(BoardOverlayTest, U13_ExplosionFrameByElapsedTime) {
+    EXPECT_EQ(explosionFrame(0), 0);
+    EXPECT_EQ(explosionFrame((1000 + kExplosionFps - 1) / kExplosionFps), 1);
+    EXPECT_EQ(explosionFrame(kExplosionDurationMs - 1), kExplosionFrameCount - 1);
+    EXPECT_EQ(explosionFrame(kExplosionDurationMs), std::nullopt);
+    EXPECT_EQ(explosionFrame(-1), std::nullopt);
+}
+
+TEST(BoardOverlayTest, U13_ExplosionLastsAboutOneAndHalfSeconds) {
+    EXPECT_GE(kExplosionDurationMs, 1300);
+    EXPECT_LE(kExplosionDurationMs, 1700);
 }

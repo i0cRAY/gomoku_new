@@ -2,6 +2,7 @@
 
 #include <QMouseEvent>
 #include <QPainter>
+#include <QUrl>
 
 #include <algorithm>
 #include <array>
@@ -9,6 +10,12 @@
 #include "core/board.h"
 #include "ui/board_geometry.h"
 #include "ui/board_overlay.h"
+
+// U13：爆炸影格的資源檔編在靜態函式庫裡，要手動初始化，否則連結時會被丟掉。
+// Q_INIT_RESOURCE 不能放在具名或匿名 namespace 裡
+static void initExplosionResource() {
+    Q_INIT_RESOURCE(explosion);
+}
 
 namespace {
 
@@ -49,6 +56,12 @@ QPointF toQt(BoardGeometry::Point p) {
 
 BoardView::BoardView(QWidget* parent) : QWidget(parent) {
     setMouseTracking(true);  // U3：摧毀預覽跟著滑鼠
+    initExplosionResource();
+    explosionFrames.reserve(kExplosionFrameCount);
+    for (int i = 0; i < kExplosionFrameCount; ++i) {
+        explosionFrames.emplace_back(QStringLiteral(":/explosion/explosion_%1.png").arg(i, 2, 10, QLatin1Char('0')));
+    }
+    explosionSound.setSource(QUrl(QStringLiteral("qrc:/explosion.wav")));
     animation.setInterval(kAnimationIntervalMs);
     connect(&animation, &QTimer::timeout, this, [this] {
         flashes.erase(std::remove_if(flashes.begin(), flashes.end(),
@@ -57,7 +70,10 @@ BoardView::BoardView(QWidget* parent) : QWidget(parent) {
         if (!clearing.empty() && clearingStarted.elapsed() >= kClearFlashDurationMs) {
             clearing.clear();
         }
-        if (flashes.empty() && clearing.empty()) {
+        if (explosionStarted && !explosionFrame(explosionStarted->elapsed())) {
+            explosionStarted.reset();
+        }
+        if (flashes.empty() && clearing.empty() && !explosionStarted) {
             animation.stop();
         }
         update();
@@ -71,6 +87,13 @@ void BoardView::startAnimation() {
 }
 
 void BoardView::setView(const PlayerView& newView) {
+    // U13：新出現的已摧毀格子代表剛有人用了摧毀
+    if (!newlyDestroyedCells(view.board, newView.board).empty()) {
+        explosionStarted.emplace();
+        explosionStarted->start();
+        explosionSound.play();
+        startAnimation();
+    }
     view = newView;
     update();
 }
@@ -158,6 +181,7 @@ void BoardView::paintEvent(QPaintEvent*) {
     }
 
     paintClearFlash(painter, cell);
+    paintExplosion(painter);
     paintSkillPreview(painter, cell);
 
     // P6：被拒絕的格子閃紅色，逐漸淡出
@@ -264,4 +288,21 @@ void BoardView::paintSkillPreview(QPainter& painter, double cell) {
         const QPointF c = toQt(g.cellCenter(p));
         painter.fillRect(QRectF(c.x() - cell / 2, c.y() - cell / 2, cell, cell), color);
     }
+}
+
+// U13：摧毀的爆炸影格蓋滿整個棋盤
+void BoardView::paintExplosion(QPainter& painter) {
+    if (!explosionStarted) {
+        return;
+    }
+    const auto frame = explosionFrame(explosionStarted->elapsed());
+    if (!frame) {
+        return;
+    }
+    const BoardGeometry::Square area = BoardGeometry(width(), height()).boardArea();
+    const QPixmap& pixmap = explosionFrames[*frame];
+    painter.save();
+    painter.setRenderHint(QPainter::SmoothPixmapTransform);
+    painter.drawPixmap(QRectF(area.x, area.y, area.side, area.side), pixmap, QRectF(pixmap.rect()));
+    painter.restore();
 }

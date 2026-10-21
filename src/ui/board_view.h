@@ -1,6 +1,8 @@
 #pragma once
 
 #include <QElapsedTimer>
+#include <QPixmap>
+#include <QSoundEffect>
 #include <QTimer>
 #include <QWidget>
 
@@ -11,7 +13,7 @@
 #include "core/types.h"
 #include "ui/board_overlay.h"
 
-// 棋盤顯示（spec U1、U3、U5、U9、U11、P6）。不保存遊戲狀態，只畫最近一次收到的 PlayerView。
+// 棋盤顯示（spec U1、U3、U5、U9、U11、U13、P6）。不保存遊戲狀態，只畫最近一次收到的 PlayerView。
 class BoardView : public QWidget {
     Q_OBJECT
 public:
@@ -45,6 +47,7 @@ private:
     void paintZones(QPainter&, double cell);
     void paintClearFlash(QPainter&, double cell);
     void paintSkillPreview(QPainter&, double cell);
+    void paintExplosion(QPainter&);
     void startAnimation();
 
     PlayerView view;
@@ -54,5 +57,8 @@ private:
     std::optional<SkillArea> previewArea;
     std::optional<Pos> hover;
     TimeMs zoneDuration = 3000;
+    std::optional<QElapsedTimer> explosionStarted;  // U13：正在播放摧毀爆炸時才有值
+    std::vector<QPixmap> explosionFrames;
+    QSoundEffect explosionSound;
     QTimer animation;
 };

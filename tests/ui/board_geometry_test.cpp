@@ -46,3 +46,16 @@ TEST(BoardGeometryTest, U1_EmptyWidgetHasNoCells) {
     const BoardGeometry g(0, 0);
     EXPECT_EQ(g.pixelToCell(0, 0), std::nullopt);
 }
+
+// U13：爆炸動畫蓋滿整個棋盤，包括四周一格的邊距
+TEST(BoardGeometryTest, U13_BoardAreaIncludesMargin) {
+    const BoardGeometry square(800, 800);
+    EXPECT_DOUBLE_EQ(square.boardArea().x, 0.0);
+    EXPECT_DOUBLE_EQ(square.boardArea().y, 0.0);
+    EXPECT_DOUBLE_EQ(square.boardArea().side, 800.0);
+
+    const BoardGeometry wide(1000, 600);
+    EXPECT_DOUBLE_EQ(wide.boardArea().x, 200.0);
+    EXPECT_DOUBLE_EQ(wide.boardArea().y, 0.0);
+    EXPECT_DOUBLE_EQ(wide.boardArea().side, 600.0);
+}

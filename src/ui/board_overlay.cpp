@@ -60,3 +60,22 @@ std::optional<Pos> clearedLabelCell(const std::vector<ClearedLine>& lines) {
     std::sort(stones.begin(), stones.end(), [](Pos a, Pos b) { return a.x != b.x ? a.x < b.x : a.y < b.y; });
     return stones[stones.size() / 2];
 }
+
+std::vector<Pos> newlyDestroyedCells(const Board& before, const Board& after) {
+    std::vector<Pos> cells;
+    for (int y = 0; y < Board::kSize; ++y) {
+        for (int x = 0; x < Board::kSize; ++x) {
+            if (after.at({x, y}) == Cell::Destroyed && before.at({x, y}) != Cell::Destroyed) {
+                cells.push_back({x, y});
+            }
+        }
+    }
+    return cells;
+}
+
+std::optional<int> explosionFrame(TimeMs elapsed) {
+    if (elapsed < 0 || elapsed >= kExplosionDurationMs) {
+        return std::nullopt;
+    }
+    return static_cast<int>(elapsed * kExplosionFps / kMsPerSecond);
+}

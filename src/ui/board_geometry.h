@@ -12,6 +12,11 @@ public:
         double x;
         double y;
     };
+    struct Square {
+        double x;
+        double y;
+        double side;
+    };
 
     BoardGeometry(int width, int height);
 
@@ -19,6 +24,8 @@ public:
     Point cellCenter(Pos p) const;
     // 點擊位置換成最近的交叉點；離棋盤最外圈的線超過半格時回傳 nullopt（U1）
     std::optional<Pos> pixelToCell(double x, double y) const;
+    // 整個棋盤（含四周邊距）所佔的正方形（U13）
+    Square boardArea() const;
 
 private:
     double cell;
