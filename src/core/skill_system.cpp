@@ -40,7 +40,7 @@ void SkillSystem::apply(const SkillAction& action, PlayerState& state, Board& bo
             bombArea(*action.target, board);
             break;
         case SkillId::Dominate:
-            state.dominateCharges = config.dominateStones;  // SZ1：重設，不疊加
+            state.dominateCharges += config.dominateStones;  // SZ1：疊加，沒有上限
             break;
         case SkillId::Destroy:
             destroyArea(*action.target, board, zones);

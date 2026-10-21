@@ -153,13 +153,15 @@ TEST_F(DominateTest, SZ2_NoChargesNoZone) {
     EXPECT_TRUE(zones.active(1000).empty());
 }
 
-TEST_F(DominateTest, SZ1_ReuseResetsChargesWithoutStacking) {
+TEST_F(DominateTest, SZ1_ReuseStacksCharges) {
     skills.apply(dominate(), state, board, zones, kReady);
     skills.onPlaced(PlayerId::Black, state, {7, 7}, zones, 21000);
     ASSERT_EQ(state.dominateCharges, 2);
     ASSERT_EQ(skills.check(dominate(), state, board), std::nullopt);  // 沒有冷卻，能量夠就能再用
     skills.apply(dominate(), state, board, zones, 22000);
-    EXPECT_EQ(state.dominateCharges, 3);
+    EXPECT_EQ(state.dominateCharges, 5);
+    skills.apply(dominate(), state, board, zones, 23000);
+    EXPECT_EQ(state.dominateCharges, 8);  // 沒有上限
 }
 
 TEST_F(DominateTest, SZ5_CheckOrder) {
