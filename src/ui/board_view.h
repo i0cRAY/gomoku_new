@@ -13,7 +13,7 @@
 #include "core/types.h"
 #include "ui/board_overlay.h"
 
-// 棋盤顯示（spec U1、U3、U5、U9、U11、U13、P6）。不保存遊戲狀態，只畫最近一次收到的 PlayerView。
+// 棋盤顯示（spec U1、U3、U5、U9、U11、U13、U14、P6）。不保存遊戲狀態，只畫最近一次收到的 PlayerView。
 class BoardView : public QWidget {
     Q_OBJECT
 public:
@@ -60,5 +60,8 @@ private:
     std::optional<QElapsedTimer> explosionStarted;  // U13：正在播放摧毀爆炸時才有值
     std::vector<QPixmap> explosionFrames;
     QSoundEffect explosionSound;
+    std::optional<QElapsedTimer> laughStarted;  // U14：正在播放禁區大笑時才有值
+    std::vector<QPixmap> laughFrames;
+    QSoundEffect laughSound;
     QTimer animation;
 };

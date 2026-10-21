@@ -38,11 +38,6 @@ double zoneOpacity(const ZoneCell& zone, TimeMs now, TimeMs duration) {
     return std::clamp(static_cast<double>(zone.expiresAt - now) / static_cast<double>(duration), 0.0, 1.0);
 }
 
-int zoneRemainingSeconds(const ZoneCell& zone, TimeMs now) {
-    const TimeMs left = zone.expiresAt - now;
-    return left <= 0 ? 0 : static_cast<int>((left + kMsPerSecond - 1) / kMsPerSecond);
-}
-
 std::string clearedScoreText(const std::vector<ClearedLine>& lines) {
     if (lines.empty()) {
         return {};
@@ -78,4 +73,13 @@ std::optional<int> explosionFrame(TimeMs elapsed) {
         return std::nullopt;
     }
     return static_cast<int>(elapsed * kExplosionFps / kMsPerSecond);
+}
+
+int laughFrame(TimeMs elapsed) {
+    const TimeMs inLoop = ((elapsed % kLaughLoopMs) + kLaughLoopMs) % kLaughLoopMs;
+    return static_cast<int>(inLoop * kLaughFps / kMsPerSecond);
+}
+
+bool laughActive(const PlayerView& view) {
+    return view.status == GameStatus::Running && !view.zones.empty();
 }

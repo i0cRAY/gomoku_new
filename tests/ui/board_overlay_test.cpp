@@ -47,14 +47,6 @@ TEST(BoardOverlayTest, U9_ZoneOpacityFadesWithRemainingTime) {
     EXPECT_DOUBLE_EQ(zoneOpacity(zone, 9000, 3000), 0.0);
 }
 
-TEST(BoardOverlayTest, U9_ZoneRemainingSecondsRoundsUp) {
-    const ZoneCell zone{{3, 3}, PlayerId::Black, 3000};
-    EXPECT_EQ(zoneRemainingSeconds(zone, 0), 3);
-    EXPECT_EQ(zoneRemainingSeconds(zone, 1001), 2);
-    EXPECT_EQ(zoneRemainingSeconds(zone, 2999), 1);
-    EXPECT_EQ(zoneRemainingSeconds(zone, 3000), 0);
-}
-
 TEST(BoardOverlayTest, U11_ClearedScoreTextSumsLines) {
     const ClearedLine five{PlayerId::Black, {{0, 0}, {1, 0}, {2, 0}, {3, 0}, {4, 0}}};
     const ClearedLine six{PlayerId::Black, {{0, 1}, {1, 1}, {2, 1}, {3, 1}, {4, 1}, {5, 1}}};
@@ -112,4 +104,38 @@ TEST(BoardOverlayTest, U13_ExplosionFrameByElapsedTime) {
 TEST(BoardOverlayTest, U13_ExplosionLastsAboutOneAndHalfSeconds) {
     EXPECT_GE(kExplosionDurationMs, 1300);
     EXPECT_LE(kExplosionDurationMs, 1700);
+}
+
+TEST(BoardOverlayTest, U14_LaughFrameLoops) {
+    const TimeMs frameMs = (1000 + kLaughFps - 1) / kLaughFps;
+    EXPECT_EQ(laughFrame(0), 0);
+    EXPECT_EQ(laughFrame(frameMs), 1);
+    EXPECT_EQ(laughFrame(kLaughLoopMs - 1), kLaughFrameCount - 1);
+    EXPECT_EQ(laughFrame(kLaughLoopMs), 0);  // 播完從頭再來
+    EXPECT_EQ(laughFrame(kLaughLoopMs * 5 + frameMs), 1);
+}
+
+TEST(BoardOverlayTest, U14_LaughFrameStaysInRange) {
+    for (TimeMs t = 0; t < kLaughLoopMs * 3; t += 7) {
+        const int frame = laughFrame(t);
+        EXPECT_GE(frame, 0);
+        EXPECT_LT(frame, kLaughFrameCount);
+    }
+}
+
+TEST(BoardOverlayTest, U14_LaughPlaysWhileAnyZoneActive) {
+    PlayerView view;
+    view.status = GameStatus::Running;
+    EXPECT_FALSE(laughActive(view));
+    view.zones = {ZoneCell{{3, 3}, PlayerId::White, 3000}};
+    EXPECT_TRUE(laughActive(view));
+}
+
+TEST(BoardOverlayTest, U14_LaughStopsWhenGameEnds) {
+    PlayerView view;
+    view.zones = {ZoneCell{{3, 3}, PlayerId::White, 3000}};  // 結束時禁區還沒到期
+    for (GameStatus status : {GameStatus::BlackWon, GameStatus::WhiteWon, GameStatus::Draw, GameStatus::Aborted}) {
+        view.status = status;
+        EXPECT_FALSE(laughActive(view));
+    }
 }

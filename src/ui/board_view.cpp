@@ -11,10 +11,11 @@
 #include "ui/board_geometry.h"
 #include "ui/board_overlay.h"
 
-// U13：爆炸影格的資源檔編在靜態函式庫裡，要手動初始化，否則連結時會被丟掉。
+// U13、U14：爆炸與大笑的資源檔編在靜態函式庫裡，要手動初始化，否則連結時會被丟掉。
 // Q_INIT_RESOURCE 不能放在具名或匿名 namespace 裡
-static void initExplosionResource() {
+static void initEffectResources() {
     Q_INIT_RESOURCE(explosion);
+    Q_INIT_RESOURCE(laugh);
 }
 
 namespace {
@@ -39,7 +40,6 @@ constexpr double kClearRingWidth = 0.08;
 constexpr int kZoneMaxAlpha = 110;
 constexpr int kPreviewAlpha = 70;
 constexpr double kScoreFontScale = 0.6;   // 以格距為單位
-constexpr double kZoneFontScale = 0.4;
 constexpr int kFlashDurationMs = 400;
 constexpr int kAnimationIntervalMs = 16;
 constexpr int kRejectFlashMaxAlpha = 170;
@@ -56,12 +56,18 @@ QPointF toQt(BoardGeometry::Point p) {
 
 BoardView::BoardView(QWidget* parent) : QWidget(parent) {
     setMouseTracking(true);  // U3：摧毀預覽跟著滑鼠
-    initExplosionResource();
+    initEffectResources();
     explosionFrames.reserve(kExplosionFrameCount);
     for (int i = 0; i < kExplosionFrameCount; ++i) {
         explosionFrames.emplace_back(QStringLiteral(":/explosion/explosion_%1.png").arg(i, 2, 10, QLatin1Char('0')));
     }
     explosionSound.setSource(QUrl(QStringLiteral("qrc:/explosion.wav")));
+    laughFrames.reserve(kLaughFrameCount);
+    for (int i = 0; i < kLaughFrameCount; ++i) {
+        laughFrames.emplace_back(QStringLiteral(":/laugh/laugh_%1.png").arg(i, 2, 10, QLatin1Char('0')));
+    }
+    laughSound.setSource(QUrl(QStringLiteral("qrc:/laugh.wav")));
+    laughSound.setLoopCount(QSoundEffect::Infinite);
     animation.setInterval(kAnimationIntervalMs);
     connect(&animation, &QTimer::timeout, this, [this] {
         flashes.erase(std::remove_if(flashes.begin(), flashes.end(),
@@ -73,7 +79,7 @@ BoardView::BoardView(QWidget* parent) : QWidget(parent) {
         if (explosionStarted && !explosionFrame(explosionStarted->elapsed())) {
             explosionStarted.reset();
         }
-        if (flashes.empty() && clearing.empty() && !explosionStarted) {
+        if (flashes.empty() && clearing.empty() && !explosionStarted && !laughStarted) {
             animation.stop();
         }
         update();
@@ -93,6 +99,16 @@ void BoardView::setView(const PlayerView& newView) {
         explosionStarted->start();
         explosionSound.play();
         startAnimation();
+    }
+    // U14：禁區出現時開始大笑，全部到期（或對局結束）時停止
+    if (laughActive(newView) && !laughStarted) {
+        laughStarted.emplace();
+        laughStarted->start();
+        laughSound.play();
+        startAnimation();
+    } else if (!laughActive(newView) && laughStarted) {
+        laughStarted.reset();
+        laughSound.stop();
     }
     view = newView;
     update();
@@ -219,23 +235,23 @@ void BoardView::leaveEvent(QEvent*) {
     update();
 }
 
-// U9：禁區依所屬方上色，隨剩餘時間漸淡，並標出剩餘秒數
+// U9：禁區依所屬方上色，隨剩餘時間漸淡；U14：再疊上大笑動畫（之後畫的棋子會蓋住有子的格子）
 void BoardView::paintZones(QPainter& painter, double cell) {
     const BoardGeometry g(width(), height());
-    QFont font = painter.font();
-    font.setPixelSize(std::max(1, static_cast<int>(cell * kZoneFontScale)));
-    painter.setFont(font);
+    const QPixmap* laugh = laughStarted ? &laughFrames[laughFrame(laughStarted->elapsed())] : nullptr;
+    painter.save();
+    painter.setRenderHint(QPainter::SmoothPixmapTransform);
     for (const ZoneCell& zone : view.zones) {
         QColor color = zone.owner == PlayerId::Black ? kBlackZone : kWhiteZone;
         color.setAlpha(static_cast<int>(kZoneMaxAlpha * zoneOpacity(zone, view.now, zoneDuration)));
         const QPointF c = toQt(g.cellCenter(zone.pos));
         const QRectF box(c.x() - cell / 2, c.y() - cell / 2, cell, cell);
         painter.fillRect(box, color);
-        if (view.board.isEmpty(zone.pos)) {
-            painter.setPen(zone.owner == PlayerId::Black ? kBlackZone : kWhiteZone);
-            painter.drawText(box, Qt::AlignCenter, QString::number(zoneRemainingSeconds(zone, view.now)));
+        if (laugh) {
+            painter.drawPixmap(box, *laugh, QRectF(laugh->rect()));
         }
     }
+    painter.restore();
 }
 
 // U11：被消除的連線以原本的棋子畫出並加紅圈，漸淡消失，同時顯示「+N」
