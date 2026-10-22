@@ -24,7 +24,8 @@ target_include_directories(gomoku_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 # 網路：QtCore + QtNetwork，不得依賴 QtWidgets
 add_library(gomoku_net STATIC
-    src/net/net.cpp
+    src/net/protocol.h
+    src/net/protocol.cpp
 )
 set_target_properties(gomoku_net PROPERTIES AUTOMOC ON)
 target_link_libraries(gomoku_net PUBLIC gomoku_core Qt6::Core Qt6::Network)
@@ -113,6 +114,12 @@ if(BUILD_TESTING)
     )
     target_link_libraries(app_tests PRIVATE gomoku_app GTest::gtest)
     gtest_discover_tests(app_tests)
+
+    add_executable(net_tests
+        tests/net/protocol_test.cpp
+    )
+    target_link_libraries(net_tests PRIVATE gomoku_net gomoku_app GTest::gtest_main)
+    gtest_discover_tests(net_tests)
 
     add_executable(ui_tests
         tests/ui/board_geometry_test.cpp

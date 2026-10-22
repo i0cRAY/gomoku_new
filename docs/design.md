@@ -476,7 +476,7 @@ signals:
 |type|方向|內容|
 |---|---|---|
 |`hello`|加入方 → 主機|`version`（`kProtocolVersion`，整數常數，定義於 `protocol.h`；不同就拒絕，spec N5）|
-|`welcome`|主機 → 加入方|`version`、`config`（回能間隔、比賽模式、時限或目標分數等）、`yourColor`|
+|`welcome`|主機 → 加入方|`version`、`config`（MatchConfig 中 `showAiInfo`、`ai` 以外的全部對局規則，spec N7）、`yourColor`|
 |`select_skill`|加入方 → 主機|`skill`（選擇階段可多次送出，以最後一次為準）|
 |`confirm_skill`|加入方 → 主機|—|
 |`opponent_ready`|主機 → 加入方|—（只告知對手已確定，不透露選了什麼，spec S1）|
@@ -490,7 +490,7 @@ signals:
 |`rematch_reply`|雙向|`accept`（true 時雙方回到技能選擇，false 時本局繼續）|
 |`leave`|雙向|—（回主選單；送出後斷線，另一方顯示「對手已離開」，spec N8）|
 
-`kProtocolVersion` 因本次規則變更加 1（spec N5）。
+`kProtocolVersion` 目前為 1，之後每次規則變更就加 1（spec N5）。
 
 **主機端**：網路收到的 `request` 和本機玩家的操作，都進同一個 `GameController::submit`，時間一律用主機的 GameClock。 **加入方**：不執行任何規則，只把操作轉成 `request` 送出，再依收到的 `snapshot` 更新畫面。加入方使用 `RemoteSession`（見 §4.6）：只保存收到的 PlayerView，不自己判定。加入方的能量條使用快照裡的 `nextEnergyRatio`；兩次快照之間（200 ms）由本機時鐘依回能速度往上補，讓動畫連續，收到新快照時再校正。
 

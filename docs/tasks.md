@@ -215,12 +215,12 @@
 
 ## Phase 5　區網連線
 
-- [ ] **T19 協定編解碼** `src/net/protocol`　規格：design §4.9、N4、N5、N8、N9
+- [x] **T19 協定編解碼** `src/net/protocol`　規格：design §4.9、N4、N5、N8、N9
 
     - 每種訊息都有「編碼 → 解碼 → 內容相同」的測試（包括 `rematch_request`、`rematch_reply`、`leave`、`linesCleared`）；壞掉的 JSON 不會讓程式崩潰
     - `snapshot` 帶有 Destroyed 格、禁區、雙方分數、模式與剩餘時間或目標分數、是否在延長賽中、盤面分（有決勝時）、最近消除的連線
     - `snapshot` 編碼後的 JSON 裡沒有主機方的能量、霸道次數與所選技能（N4、E5、S1）
-    - `welcome` 的 config 帶有比賽模式設定；`kProtocolVersion` 已加 1
+    - `welcome` 的 config 帶有全部對局規則（不含 `showAiInfo`、`ai`）；`kProtocolVersion` 為 1
 - [ ] **T20 主機端**　規格：M2、N1、N2、N4、N5、N7
 
     - QTcpServer 只接受一位對手；處理 `select_skill`／`confirm_skill`，雙方確定後開始倒數；遠端請求進 `submit`；每次狀態變化和每 200 ms 送 `viewFor(加入方)`；消除時送 `linesCleared`
