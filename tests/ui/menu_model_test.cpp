@@ -80,15 +80,17 @@ TEST(MenuModelTest, G4_IsFinished) {
 
 // ---- G1b：比賽模式 ----
 
-TEST(MenuModelTest, G1b_TimeLimitOptionsAreFiveThreeOneMinutes) {
+TEST(MenuModelTest, G1b_TimeLimitOptionsAreFiveThreeOneMinutesAndThreeSeconds) {
     const auto options = timeLimitOptions();
-    ASSERT_EQ(options.size(), 3u);
+    ASSERT_EQ(options.size(), 4u);
     EXPECT_EQ(options[0], 300000);
     EXPECT_EQ(options[1], 180000);
     EXPECT_EQ(options[2], 60000);
+    EXPECT_EQ(options[3], 3000);  // 展示延長賽用
     EXPECT_EQ(options[defaultTimeLimitIndex()], MatchConfig{}.timeLimit);
     EXPECT_EQ(timeLimitLabel(300000), "5 分鐘");
     EXPECT_EQ(timeLimitLabel(60000), "1 分鐘");
+    EXPECT_EQ(timeLimitLabel(3000), "3 秒");
 }
 
 TEST(MenuModelTest, G1b_TargetScoreRange) {

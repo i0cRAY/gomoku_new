@@ -165,7 +165,7 @@ struct MatchConfig {
     TimeMs countdown = 3000;             // spec G2
     int minLineLength = 5;               // spec W1
     MatchMode mode = MatchMode::TimeLimit;   // spec G1b ⚠️待確認
-    TimeMs timeLimit = 180000;           // 限時模式：60000／180000／300000
+    TimeMs timeLimit = 180000;           // 限時模式：60000／180000／300000，以及展示延長賽用的 3000
     int targetScore = 20;                // 達分模式：5–100 ⚠️待確認
     TimeMs overtime = 60000;             // spec W10：限時模式同分時的延長賽長度 ⚠️待確認
     BoardScoreConfig boardScore;         // spec W11

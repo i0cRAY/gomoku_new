@@ -10,6 +10,7 @@ constexpr TimeMs kRegenIntervalStep = 500;
 constexpr TimeMs kMsPerSecond = 1000;
 constexpr TimeMs kMsPerTenth = 100;
 constexpr TimeMs kMsPerMinute = 60000;
+constexpr TimeMs kOvertimeDemoLimit = 3000;  // G1b：展示延長賽用的 3 秒
 
 // 1500 → "1.5 秒"、2000 → "2 秒"
 std::string secondsText(TimeMs ms) {
@@ -42,7 +43,7 @@ std::string regenIntervalLabel(TimeMs interval) {
 }
 
 std::vector<TimeMs> timeLimitOptions() {
-    return {5 * kMsPerMinute, 3 * kMsPerMinute, 1 * kMsPerMinute};
+    return {5 * kMsPerMinute, 3 * kMsPerMinute, 1 * kMsPerMinute, kOvertimeDemoLimit};
 }
 
 std::size_t defaultTimeLimitIndex() {
@@ -52,6 +53,9 @@ std::size_t defaultTimeLimitIndex() {
 }
 
 std::string timeLimitLabel(TimeMs limit) {
+    if (limit < kMsPerMinute) {
+        return secondsText(limit);
+    }
     return std::to_string(limit / kMsPerMinute) + " 分鐘";
 }
 

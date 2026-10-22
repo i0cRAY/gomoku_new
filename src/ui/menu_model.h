@@ -16,7 +16,7 @@ std::size_t defaultRegenIntervalIndex();        // 預設值（MatchConfig 的 r
 std::string regenIntervalLabel(TimeMs interval);
 constexpr int kMinTargetScore = 5;    // G1b：達分模式的目標分數範圍 ⚠️待確認
 constexpr int kMaxTargetScore = 100;
-std::vector<TimeMs> timeLimitOptions();         // G1b：5、3、1 分鐘
+std::vector<TimeMs> timeLimitOptions();         // G1b：5、3、1 分鐘與 3 秒（展示延長賽用）
 std::size_t defaultTimeLimitIndex();
 std::string timeLimitLabel(TimeMs);
 std::string matchModeLabel(MatchMode);
