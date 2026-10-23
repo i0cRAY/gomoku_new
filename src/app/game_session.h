@@ -32,4 +32,5 @@ signals:
     void rematchRequested();  // 對手在對局中提出重開（N9）
     void rematchDeclined();   // 對手拒絕了我的邀請（N9）
     void opponentLeft();      // N8
+    void connectionLost();    // N6：心跳逾時或連線斷開
 };

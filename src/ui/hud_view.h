@@ -42,6 +42,7 @@ public:
     void setTargeting(bool);           // U3：顯示「選擇目標」提示
     void showRejection(RejectReason);  // U5
     void setReadOnly(bool);            // U10
+    void setSkillKey(QKeySequence);    // U4：區網加入方（白方）也用 Q
 
 signals:
     void skillTriggered();  // 技能按鈕或快捷鍵（U4）

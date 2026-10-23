@@ -26,6 +26,8 @@ target_include_directories(gomoku_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 add_library(gomoku_net STATIC
     src/net/protocol.h
     src/net/protocol.cpp
+    src/net/network_manager.h
+    src/net/network_manager.cpp
 )
 set_target_properties(gomoku_net PROPERTIES AUTOMOC ON)
 target_link_libraries(gomoku_net PUBLIC gomoku_core Qt6::Core Qt6::Network)
@@ -39,6 +41,10 @@ add_library(gomoku_app STATIC
     src/app/local_session.h
     src/app/local_session.cpp
     src/app/game_session.h
+    src/app/host_session.h
+    src/app/host_session.cpp
+    src/app/remote_session.h
+    src/app/remote_session.cpp
 )
 set_target_properties(gomoku_app PROPERTIES AUTOMOC ON)
 target_link_libraries(gomoku_app PUBLIC gomoku_core gomoku_net Qt6::Core)
@@ -111,14 +117,19 @@ if(BUILD_TESTING)
         tests/app/countdown_restart_test.cpp
         tests/app/local_session_test.cpp
         tests/app/ai_controller_test.cpp
+        tests/app/host_session_test.cpp
+        tests/app/remote_session_test.cpp
+        tests/app/lan_match_test.cpp
     )
     target_link_libraries(app_tests PRIVATE gomoku_app GTest::gtest)
     gtest_discover_tests(app_tests)
 
     add_executable(net_tests
+        tests/net/main.cpp
         tests/net/protocol_test.cpp
+        tests/net/network_manager_test.cpp
     )
-    target_link_libraries(net_tests PRIVATE gomoku_net gomoku_app GTest::gtest_main)
+    target_link_libraries(net_tests PRIVATE gomoku_net gomoku_app GTest::gtest)
     gtest_discover_tests(net_tests)
 
     add_executable(ui_tests

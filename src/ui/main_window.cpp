@@ -1,14 +1,18 @@
 #include "ui/main_window.h"
 
 #include <QHBoxLayout>
-#include <QMessageBox>
+#include <QInputDialog>
+#include <QNetworkInterface>
 #include <QRandomGenerator>
+#include <QStatusBar>
 #include <QShortcut>
 #include <QVBoxLayout>
 
 #include <algorithm>
 
+#include "app/host_session.h"
 #include "app/local_session.h"
+#include "app/remote_session.h"
 #include "ui/board_overlay.h"
 #include "ui/hud_model.h"
 #include "ui/menu_model.h"
@@ -18,6 +22,7 @@ namespace {
 constexpr int kTitleScale = 3;
 constexpr int kBannerScale = 2;
 constexpr int kMenuButtonWidth = 260;
+constexpr int kStatusMessageMs = 3000;
 
 QString toQString(const std::string& s) {
     return QString::fromStdString(s);
@@ -30,15 +35,28 @@ void scaleFont(QWidget* widget, int scale) {
     widget->setFont(font);
 }
 
+// 開房時顯示給對手輸入的本機 IPv4 位址
+QString localAddresses() {
+    QStringList result;
+    for (const QHostAddress& address : QNetworkInterface::allAddresses()) {
+        if (address.protocol() == QAbstractSocket::IPv4Protocol && !address.isLoopback()) {
+            result << address.toString();
+        }
+    }
+    return result.isEmpty() ? QStringLiteral("127.0.0.1") : result.join(QStringLiteral("、"));
+}
+
 }  // namespace
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent), pages(new QStackedWidget), skillPage(new SkillSelectView(config.skill)) {
     menuPage = buildMenuPage();
     gamePage = buildGamePage();
+    waitPage = buildWaitPage();
     pages->addWidget(menuPage);
     pages->addWidget(skillPage);
     pages->addWidget(gamePage);
+    pages->addWidget(waitPage);
     setCentralWidget(pages);
     setWindowTitle(QStringLiteral("即時五子棋"));
 
@@ -111,21 +129,19 @@ QWidget* MainWindow::buildMenuPage() {
     layout->addWidget(showAiInfoBox, 0, Qt::AlignCenter);
     layout->addSpacing(12);
 
-    auto addButton = [&](const QString& text, bool enabled) {
+    auto addButton = [&](const QString& text) {
         auto* button = new QPushButton(text);
         button->setFixedWidth(kMenuButtonWidth);
-        button->setEnabled(enabled);
-        if (!enabled) {
-            button->setToolTip(QStringLiteral("尚未實作"));
-        }
         layout->addWidget(button, 0, Qt::AlignCenter);
         return button;
     };
-    auto* vsAI = addButton(QStringLiteral("人機對戰"), true);
+    auto* vsAI = addButton(QStringLiteral("人機對戰"));
     connect(vsAI, &QPushButton::clicked, this, &MainWindow::startVsAI);
-    addButton(QStringLiteral("開房（區網）"), false);  // T20
-    addButton(QStringLiteral("加入（區網）"), false);  // T21
-    auto* localDev = addButton(QStringLiteral("本機雙人（開發用）"), true);
+    auto* hostButton = addButton(QStringLiteral("開房（區網）"));
+    connect(hostButton, &QPushButton::clicked, this, &MainWindow::startHost);
+    auto* joinButton = addButton(QStringLiteral("加入（區網）"));
+    connect(joinButton, &QPushButton::clicked, this, &MainWindow::startJoin);
+    auto* localDev = addButton(QStringLiteral("本機雙人（開發用）"));
     connect(localDev, &QPushButton::clicked, this, &MainWindow::startLocalDev);
     return page;
 }
@@ -164,6 +180,24 @@ QWidget* MainWindow::buildGamePage() {
     return page;
 }
 
+QWidget* MainWindow::buildWaitPage() {
+    auto* page = new QWidget;
+    auto* layout = new QVBoxLayout(page);
+    layout->setAlignment(Qt::AlignCenter);
+    waitLabel = new QLabel;
+    waitLabel->setAlignment(Qt::AlignCenter);
+    scaleFont(waitLabel, kBannerScale);
+    layout->addWidget(waitLabel);
+    auto* cancel = new QPushButton(QStringLiteral("取消"));
+    cancel->setFixedWidth(kMenuButtonWidth);
+    layout->addWidget(cancel, 0, Qt::AlignCenter);
+    connect(cancel, &QPushButton::clicked, this, [this] {
+        cancelWaiting();
+        pages->setCurrentWidget(menuPage);
+    });
+    return page;
+}
+
 void MainWindow::refreshModeWidgets() {
     const bool timeLimited = static_cast<MatchMode>(modeBox->currentData().toInt()) == MatchMode::TimeLimit;
     timeLimitBox->setVisible(timeLimited);
@@ -184,10 +218,11 @@ void MainWindow::startVsAI() {
     config = configFromMenu();
     // E5：只顯示自己的資訊；開啟 M1a 時另外顯示 AI 的唯讀 HUD（U10）
     blackHud->setTitle(config.showAiInfo ? QStringLiteral("你（黑方）") : QString());
+    blackHud->show();
     whiteHud->setTitle(QStringLiteral("AI（白方）"));
     whiteHud->setReadOnly(true);
     whiteHud->setVisible(config.showAiInfo);
-    startSession({PlayerId::Black});
+    startSession({PlayerId::Black}, std::make_unique<LocalSession>(config, PlayerId::Black));
     aiPlayer = PlayerId::White;
     // 先讓技能選擇畫面就緒，AI 確定時才看得到「對手已準備」
     auto* local = static_cast<LocalSession*>(session.get());
@@ -197,28 +232,140 @@ void MainWindow::startVsAI() {
 void MainWindow::startLocalDev() {
     config = configFromMenu();
     blackHud->setTitle(QStringLiteral("黑方（左鍵、Q）"));
+    blackHud->show();
     whiteHud->setTitle(QStringLiteral("白方（右鍵、P）"));
     whiteHud->setReadOnly(false);
+    whiteHud->setSkillKey(QKeySequence(Qt::Key_P));
     whiteHud->show();  // M3：HUD 同時顯示雙方（E5 的例外）
-    startSession({PlayerId::Black, PlayerId::White});
+    startSession({PlayerId::Black, PlayerId::White}, std::make_unique<LocalSession>(config, PlayerId::Black));
 }
 
-void MainWindow::startSession(std::vector<PlayerId> players) {
+void MainWindow::startHost() {
+    config = configFromMenu();
+    config.showAiInfo = false;  // M1a 只用在人機對戰
+    auto network = std::make_unique<NetworkManager>();
+    if (!network->host(config, kDefaultPort)) {
+        QMessageBox::warning(this, QStringLiteral("開房"),
+                             QStringLiteral("無法在埠 %1 開房，可能已有其他程式在使用。").arg(kDefaultPort));
+        return;
+    }
+    connect(network.get(), &NetworkManager::connected, this, [this] {
+        auto ready = std::move(pendingNetwork);
+        ready->disconnect(this);
+        blackHud->setTitle(QStringLiteral("你（黑方）"));
+        blackHud->show();
+        whiteHud->hide();  // E5：看不到對手的資訊
+        startSession({HostSession::kHostColor}, std::make_unique<HostSession>(config, std::move(ready)), true);
+    });
+    pendingNetwork = std::move(network);
+    waitLabel->setText(QStringLiteral("等待對手加入…\n\n本機 IP：%1\n埠：%2").arg(localAddresses()).arg(kDefaultPort));
+    pages->setCurrentWidget(waitPage);
+}
+
+void MainWindow::startJoin() {
+    bool ok = false;
+    const QString text = QInputDialog::getText(this, QStringLiteral("加入（區網）"), QStringLiteral("主機 IP："),
+                                               QLineEdit::Normal, lastJoinAddress, &ok)
+                             .trimmed();
+    if (!ok || text.isEmpty()) {
+        return;
+    }
+    QHostAddress address;
+    if (!address.setAddress(text)) {
+        QMessageBox::warning(this, QStringLiteral("加入"), QStringLiteral("「%1」不是正確的 IP 位址。").arg(text));
+        return;
+    }
+    lastJoinAddress = text;
+    auto network = std::make_unique<NetworkManager>();
+    connect(network.get(), &NetworkManager::connected, this, [this](MatchConfig hostConfig, PlayerId color) {
+        auto ready = std::move(pendingNetwork);
+        ready->disconnect(this);
+        config = hostConfig;  // N7：設定由主機決定
+        blackHud->hide();     // E5：看不到對手的資訊
+        whiteHud->setTitle(QStringLiteral("你（白方）"));
+        whiteHud->setReadOnly(false);
+        whiteHud->setSkillKey(QKeySequence(Qt::Key_Q));  // U4
+        whiteHud->show();
+        startSession({color}, std::make_unique<RemoteSession>(config, color, std::move(ready)), true);
+    });
+    connect(network.get(), &NetworkManager::versionMismatch, this, [this](int hostVersion) {
+        cancelWaiting();
+        pages->setCurrentWidget(menuPage);
+        QMessageBox::warning(this, QStringLiteral("加入"),
+                             QStringLiteral("協定版本不同（主機 %1，本機 %2），無法連線。").arg(hostVersion).arg(kProtocolVersion));  // N5
+    });
+    connect(network.get(), &NetworkManager::disconnected, this, [this, text] {
+        cancelWaiting();
+        pages->setCurrentWidget(menuPage);
+        QMessageBox::warning(this, QStringLiteral("加入"), QStringLiteral("無法連線到 %1。").arg(text));
+    });
+    pendingNetwork = std::move(network);
+    pendingNetwork->join(address, kDefaultPort);
+    waitLabel->setText(QStringLiteral("正在連線到 %1…").arg(text));
+    pages->setCurrentWidget(waitPage);
+}
+
+// 由 NetworkManager 的 signal 呼叫時不能馬上刪除它，所以用 deleteLater
+void MainWindow::cancelWaiting() {
+    if (!pendingNetwork) {
+        return;
+    }
+    pendingNetwork->disconnect(this);
+    pendingNetwork->close();
+    pendingNetwork.release()->deleteLater();
+}
+
+void MainWindow::startSession(std::vector<PlayerId> players, std::unique_ptr<GameSession> newSession, bool network) {
     localPlayers = std::move(players);
     primary = localPlayers.front();
     aiPlayer.reset();
     lastConfirmed.clear();
     lastStatus.reset();
+    networked = network;
+    notice.clear();
     blackHud->setConfig(config);
     whiteHud->setConfig(config);
     board->setZoneDuration(config.skill.zoneDuration);
 
-    session = std::make_unique<LocalSession>(config, primary);
+    session = std::move(newSession);
     connect(session.get(), &GameSession::stateChanged, this, &MainWindow::refresh);
     connect(session.get(), &GameSession::linesCleared, board, &BoardView::flashCleared);  // U11
     connect(session.get(), &GameSession::actionRejected, this, &MainWindow::onRejected);
     connect(session.get(), &GameSession::opponentReady, this, [this] { skillPage->setOpponentReady(true); });
+    connect(session.get(), &GameSession::rematchRequested, this, &MainWindow::onRematchRequested);  // N9
+    connect(session.get(), &GameSession::rematchDeclined, this, [this] {
+        statusBar()->showMessage(QStringLiteral("對手拒絕重新開局，本局繼續"), kStatusMessageMs);
+    });
+    connect(session.get(), &GameSession::opponentLeft, this, [this] { showNotice(QStringLiteral("對手已離開")); });  // N8
+    connect(session.get(), &GameSession::connectionLost, this, [this] { showNotice(QStringLiteral("連線中斷")); });  // N6
     refresh();
+}
+
+void MainWindow::showNotice(const QString& text) {
+    notice = text;
+    if (rematchDialog) {
+        rematchDialog->close();
+    }
+    statusBar()->clearMessage();
+    refresh();
+}
+
+// N9：不用會卡住事件迴圈的對話框，等待回覆期間對局照常進行
+void MainWindow::onRematchRequested() {
+    if (rematchDialog) {
+        rematchDialog->close();
+    }
+    auto* box = new QMessageBox(QMessageBox::Question, QStringLiteral("重新開局"),
+                                QStringLiteral("對手想重新開局，同意嗎？\n同意後本局中止、不計勝負。"),
+                                QMessageBox::Yes | QMessageBox::No, this);
+    box->setAttribute(Qt::WA_DeleteOnClose);
+    connect(box, &QMessageBox::finished, this, [this, box] {
+        if (session) {
+            session->answerRematch(box->clickedButton() == box->button(QMessageBox::Yes));
+        }
+    });
+    rematchDialog = box;
+    box->open();
 }
 
 bool MainWindow::isLocal(PlayerId player) const {
@@ -230,7 +377,14 @@ void MainWindow::backToMenu() {
     if (session) {
         session->leave();
     }
+    if (rematchDialog) {
+        rematchDialog->close();
+    }
     session.reset();
+    cancelWaiting();
+    networked = false;
+    notice.clear();
+    statusBar()->clearMessage();
     board->setView(PlayerView{});  // 停止禁區笑聲等仍在播放的音效（U14）
     for (BoardInput& i : inputs) {
         i.cancel();
@@ -246,9 +400,15 @@ void MainWindow::refresh() {
     const bool enteredSkillSelect = view.status == GameStatus::SkillSelect && lastStatus != GameStatus::SkillSelect;
     lastStatus = view.status;
 
+    if (rematchDialog && (view.status == GameStatus::SkillSelect || isFinished(view.status))) {
+        rematchDialog->close();  // N9：邀請已經沒有意義
+    }
+    rematchButton->setEnabled(notice.isEmpty());  // 對手已離開或斷線後不能再來一局
+
     if (view.status == GameStatus::SkillSelect) {
         if (enteredSkillSelect) {
             skillPage->reset(localPlayers, lastConfirmed);
+            statusBar()->clearMessage();
         }
         board->setView(view);  // 停止禁區笑聲等仍在播放的音效（U14）
         pages->setCurrentWidget(skillPage);
@@ -279,6 +439,11 @@ void MainWindow::refresh() {
 
     if (view.status == GameStatus::Countdown) {
         banner->setText(toQString(countdownText(view.countdownRemaining)));
+    } else if (!notice.isEmpty()) {
+        const QString result = view.status == GameStatus::Aborted
+                                   ? QString()
+                                   : toQString(finalResultText(view.status, view.scores, view.boardScores));
+        banner->setText(result.isEmpty() ? notice : result + QStringLiteral("\n") + notice);  // N6、N8
     } else {
         banner->setText(toQString(finalResultText(view.status, view.scores, view.boardScores)));  // U6；進行中為空字串
     }
@@ -287,6 +452,21 @@ void MainWindow::refresh() {
 
 void MainWindow::onRematchClicked() {
     if (!session) {
+        return;
+    }
+    if (networked) {
+        const GameStatus status = session->viewFor(primary).status;
+        if (isFinished(status)) {
+            statusBar()->showMessage(QStringLiteral("等待對手也按「再來一局」…"));  // G4
+        } else {
+            const auto answer = QMessageBox::question(this, QStringLiteral("重新開局"),
+                                                      QStringLiteral("要邀請對手重新開局嗎？"));
+            if (answer != QMessageBox::Yes) {
+                return;
+            }
+            statusBar()->showMessage(QStringLiteral("已送出重開邀請，等待對手回覆…"), kStatusMessageMs);  // N9
+        }
+        session->requestRematch();
         return;
     }
     if (!isFinished(session->viewFor(primary).status) && !confirmLeavingMatch(QStringLiteral("重新開局"))) {
@@ -343,7 +523,7 @@ void MainWindow::onBoardClicked(Pos pos, Qt::MouseButton button) {
 }
 
 void MainWindow::onSkillKey(PlayerId player) {
-    if (!session || pages->currentWidget() != gamePage) {
+    if (!session || pages->currentWidget() != gamePage || !isLocal(player)) {
         return;
     }
     send(input(player).onSkillKey(session->viewFor(player)));

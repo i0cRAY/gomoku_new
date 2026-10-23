@@ -4,6 +4,8 @@
 #include <QComboBox>
 #include <QLabel>
 #include <QMainWindow>
+#include <QMessageBox>
+#include <QPointer>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QStackedWidget>
@@ -16,6 +18,7 @@
 
 #include "app/game_session.h"
 #include "core/config.h"
+#include "net/network_manager.h"
 #include "ui/board_input.h"
 #include "ui/board_view.h"
 #include "ui/hud_view.h"
@@ -32,10 +35,16 @@ public:
 private:
     QWidget* buildMenuPage();
     QWidget* buildGamePage();
+    QWidget* buildWaitPage();
 
     void startVsAI();      // M1：玩家為黑方，AI 為白方
     void startLocalDev();  // M3
-    void startSession(std::vector<PlayerId> players);
+    void startHost();      // M2、N1：開房後等待對手，主機為黑方
+    void startJoin();      // M2、N1：輸入主機 IP 加入
+    void cancelWaiting();  // 取消開房或連線中的等待
+    void startSession(std::vector<PlayerId> players, std::unique_ptr<GameSession>, bool network = false);
+    void showNotice(const QString&);  // N6、N8：連線中斷、對手已離開
+    void onRematchRequested();        // N9
     MatchConfig configFromMenu() const;
     bool isLocal(PlayerId) const;
     void backToMenu();
@@ -71,6 +80,8 @@ private:
     ScoreBoard* scoreBoard;
     QPushButton* rematchButton;
     QPushButton* menuButton;
+    QWidget* waitPage;
+    QLabel* waitLabel;
 
     std::unique_ptr<GameSession> session;
     std::vector<PlayerId> localPlayers;
@@ -79,4 +90,9 @@ private:
     std::array<BoardInput, 2> inputs{BoardInput(PlayerId::Black), BoardInput(PlayerId::White)};
     std::map<PlayerId, SkillId> lastConfirmed;  // G4：再來一局時預設選中上一局的技能
     std::optional<GameStatus> lastStatus;
+    std::unique_ptr<NetworkManager> pendingNetwork;  // 開房或加入後、握手完成前
+    bool networked = false;                          // M2
+    QString notice;                                  // 對手已離開／連線中斷
+    QPointer<QMessageBox> rematchDialog;             // N9：對手的重開邀請
+    QString lastJoinAddress;
 };

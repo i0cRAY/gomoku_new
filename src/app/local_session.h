@@ -25,7 +25,9 @@ public:
     void attachAI(PlayerId, std::uint32_t seed);  // M1：AI 操作這一方
     const GameClock& clock() const { return gameClock; }
 
-private:
+protected:
+    virtual void onTick(TimeMs now);  // GameClock 每次 tick 呼叫
+
     MatchConfig config;
     PlayerId localPlayer;
     GameController controller;

@@ -361,11 +361,13 @@ signals:
     void rematchRequested();                          // 對手在對局中提出重開（N9）
     void rematchDeclined();                           // 對手拒絕了我的邀請（N9）
     void opponentLeft();                              // N8
+    void connectionLost();                            // N6：心跳逾時或連線斷開，畫面顯示「連線中斷」
 };
 ```
 
-- `LocalSession`：持有 GameController 與 GameClock（人機模式時 GameController 內含 AI）。M1、M3 與區網主機端都用它；主機端另外接上 NetworkManager。本機（M1、M3）的 `requestRematch` 直接呼叫 `GameController::restart()`。
-- `RemoteSession`：區網加入方用。只保存最近一次快照的 PlayerView，`request` 轉成網路訊息，不做任何判定。`viewFor` 只能取自己的顏色，所以不支援 M1a。
+- `LocalSession`：持有 GameController 與 GameClock（人機模式時 GameController 內含 AI）。M1、M3 用它。本機（M1、M3）的 `requestRematch` 直接呼叫 `GameController::restart()`。
+- `HostSession`（`src/app/host_session.h`）：區網主機端，繼承 `LocalSession`，另外持有握手完成的 NetworkManager。主機為黑方、加入方為白方。加入方的 `select_skill`／`confirm_skill`／`request` 都進同一個 GameController（`request` 的 `player` 一律改成白方，N2），被拒絕時回 `reject`（帶原本的 `seq`）。快照：GameController 發 `stateChanged` 時送出 `viewFor(白方)`，但 tick 造成的 `stateChanged` 不送，改由每 `NetConfig::snapshotInterval`（200 ms）的定時快照負責；tick 中對局狀態改變（倒數結束、時間到）時立刻送（N4）。`linesCleared` 照轉；主機確定技能時送 `opponent_ready`。再來一局：結束後雙方都送出 `rematch` 才重開（G4）；對局中的邀請同一時間只有一個，雙方同時邀請視為彼此同意（N9）。收到 `leave` 或斷線時中止本局，發 `opponentLeft` 或 `connectionLost`。
+- `RemoteSession`（`src/app/remote_session.h`）：區網加入方用。只保存最近一次快照的 PlayerView，`request` 轉成網路訊息（附遞增的 `seq`，並記住目標格，收到 `reject` 時用來給 P6 提示），不做任何判定。`viewFor` 只能取自己的顏色，所以不支援 M1a。兩次快照之間由 `extrapolate` 依本機經過的時間往前推（見 §4.9）。
 
 ### 4.7 GameClock（`src/app/game_clock.h`）
 
@@ -448,28 +450,36 @@ Send --> End
 ### 4.9 NetworkManager（`src/net/`）— spec N1–N9
 
 ```cpp
+inline constexpr quint16 kDefaultPort = 50505;   // spec N1
+
+struct NetConfig {                  // 時間設定集中在這裡，測試可以縮短
+    int heartbeatInterval = 1000;   // N6
+    int timeout = 5000;             // N6
+    int timeoutCheckInterval = 100;
+    int snapshotInterval = 200;     // N4：主機對局中定時送快照的間隔
+    int leaveGracePeriod = 1000;    // N8：送出 leave 後等對方關閉連線的最長時間
+};
+
 class NetworkManager : public QObject {
     Q_OBJECT
 public:
-    bool host(quint16 port);                       // QTcpServer
-    void join(const QHostAddress&, quint16 port);  // QTcpSocket
-    void sendRequest(const Action&, std::uint32_t seq);   // 加入方 → 主機
-    void sendSnapshot(const PlayerView&);                  // 主機 → 加入方（傳 viewFor(加入方)）
-    void sendReject(std::uint32_t seq, RejectReason);      // 主機 → 加入方
-    void sendRematchRequest();                             // 雙向，N9
-    void sendRematchReply(bool accept);                    // 雙向，N9
-    void sendLeave();                                      // 雙向，N8；送出後斷線
+    explicit NetworkManager(NetConfig = {}, QObject* parent = nullptr);
+    bool host(const MatchConfig&, quint16 port);   // QTcpServer；config 在握手時以 welcome 傳給加入方（N7）
+    void join(const QHostAddress&, quint16 port);  // QTcpSocket；連上後送 hello
+    bool isConnected() const;                      // 握手完成且尚未斷線
+    void send(const Message&);                     // 任何協定訊息（protocol.h），握手完成後才送
+    void sendLeave();                              // N8：送出 leave 後斷線，不再發 signal
+    void close();                                  // 不通知對方、不發 signal
 signals:
-    void connected(MatchConfig);
-    void requestReceived(Action, std::uint32_t seq);   // 主機收到
-    void snapshotReceived(PlayerView);                 // 加入方收到
-    void rejected(std::uint32_t seq, RejectReason);
-    void rematchRequested();
-    void rematchReplied(bool accept);
+    void connected(MatchConfig, PlayerId yourColor);   // 握手完成
+    void versionMismatch(int remoteVersion);           // N5：加入方收到版本不同的 welcome
+    void messageReceived(const Message&);              // hello、welcome、ping、leave 以外的訊息
     void opponentLeft();                               // 收到 leave（N8）
-    void disconnected();                               // 心跳逾時或 socket 斷開（N6）
+    void disconnected();                               // 心跳逾時或 socket 斷開（N6）；加入方連不上主機時也會發出
 };
 ```
+
+NetworkManager 只負責連線本身：主機只接受一位對手（握手完成後停止監聽，握手前多出來的連線直接關閉，N1）、握手比對版本（主機收到版本不同的 `hello` 時仍回 `welcome` 告知自己的版本，然後斷線並繼續等下一位；加入方看到版本不同就發 `versionMismatch`，N5）、心跳與逾時（N6）、`leave`（N8）。遊戲內容的訊息一律經 `send`／`messageReceived` 交給 HostSession、RemoteSession 處理。
 
 **協定**：每則訊息是一行 JSON（以 `\n` 結尾），編碼與解碼放在 `src/net/protocol.h/.cpp`，函式寫成純函式，方便單元測試。
 
@@ -514,16 +524,16 @@ BoardView 點擊 (x,y)
  → EnergyManager::advance → 依 P1 檢查 → Board::set → SkillSystem::onPlaced（霸道禁區）
  → RuleChecker::findLines → 移除連線、加分、emit linesCleared → 檢查 W8 / W4
  → emit stateChanged → BoardView / HudView / ScoreBoard 用 viewFor(自己) 重畫
-   （主機端另外呼叫 NetworkManager::sendSnapshot(viewFor(加入方))）
+   （主機端 HostSession 另外 send(snapshot: viewFor(加入方))）
 ```
 
 **加入方下子**
 
 ```
-BoardView 點擊 → NetworkManager::sendRequest(seq)
- → 主機 requestReceived → GameController::submit(主機的時間)
- → 成功：sendSnapshot；失敗：sendReject(seq)
- → 加入方 snapshotReceived / rejected → 更新畫面或顯示提示
+BoardView 點擊 → RemoteSession::request → NetworkManager::send(request: seq, action)
+ → 主機 messageReceived → HostSession → GameController::submit(主機的時間)
+ → 成功：send(snapshot)；失敗：send(reject: seq, reason)
+ → 加入方 messageReceived → RemoteSession 更新快照或發 actionRejected → 更新畫面或顯示提示
 ```
 
 ---

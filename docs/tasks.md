@@ -221,10 +221,10 @@
     - `snapshot` 帶有 Destroyed 格、禁區、雙方分數、模式與剩餘時間或目標分數、是否在延長賽中、盤面分（有決勝時）、最近消除的連線
     - `snapshot` 編碼後的 JSON 裡沒有主機方的能量、霸道次數與所選技能（N4、E5、S1）
     - `welcome` 的 config 帶有全部對局規則（不含 `showAiInfo`、`ai`）；`kProtocolVersion` 為 1
-- [ ] **T20 主機端**　規格：M2、N1、N2、N4、N5、N7
+- [x] **T20 主機端**　規格：M2、N1、N2、N4、N5、N7
 
     - QTcpServer 只接受一位對手；處理 `select_skill`／`confirm_skill`，雙方確定後開始倒數；遠端請求進 `submit`；每次狀態變化和每 200 ms 送 `viewFor(加入方)`；消除時送 `linesCleared`
-- [ ] **T21 加入方**　規格：N3
+- [x] **T21 加入方**　規格：N3
 
     - 實作 `RemoteSession`（design §4.6）
     - 輸入 IP 連線；操作轉成 request；依快照重畫；收到 reject 時顯示提示

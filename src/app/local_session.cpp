@@ -15,7 +15,11 @@ LocalSession::LocalSession(MatchConfig config, PlayerId localPlayer, QObject* pa
             emit opponentReady();
         }
     });
-    connect(&gameClock, &GameClock::tick, &controller, &GameController::tick);
+    connect(&gameClock, &GameClock::tick, this, &LocalSession::onTick);
+}
+
+void LocalSession::onTick(TimeMs now) {
+    controller.tick(now);
 }
 
 void LocalSession::selectSkill(PlayerId player, SkillId skill) {

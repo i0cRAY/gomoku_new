@@ -131,6 +131,12 @@ void HudView::setReadOnly(bool isReadOnly) {
     refreshSkillText();
 }
 
+void HudView::setSkillKey(QKeySequence key) {
+    skillKey = key;
+    skillShortcut->setKey(key);
+    refreshSkillText();
+}
+
 void HudView::setTargeting(bool isTargeting) {
     targeting = isTargeting;
     refreshSkillText();
