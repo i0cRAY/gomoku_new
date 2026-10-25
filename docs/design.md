@@ -408,6 +408,31 @@ AIEngine 只回傳「想做的動作」，由 GameController 的 `tick` 呼叫�
 
 所有「下在某格」的候選都先排除對手的禁區（spec A5a），流程圖不另外畫出。
 
+#### AIPlayer 介面與基準 AI（spec §11 的 AI 強化跑分）
+
+GameController 不直接持有 AIEngine，而是持有介面，讓對戰工具可以換成基準 AI：
+
+```cpp
+// src/core/ai_player.h
+class AIPlayer {
+public:
+    virtual ~AIPlayer() = default;
+    virtual SkillId chooseSkill() = 0;
+    virtual std::optional<Action> decide(const PlayerView&) = 0;
+    virtual void newGame() = 0;
+};
+
+class AIEngine : public AIPlayer { ... };  // 遊戲本體使用的 AI
+
+// GameController
+void attachAI(PlayerId, std::unique_ptr<AIPlayer>);
+std::array<std::unique_ptr<AIPlayer>, 2> ais;
+```
+
+- `AIConfig::useSkills`（預設 `true`）：`false` 時 AI 不使用技能，`A9a` 也不套用，只給對戰工具的「無技能」跑分使用，遊戲本體一律是 `true`。
+- `BaselineAI`：T24 開始時把 AIEngine（含 `useSkills`）原樣複製一份，放在 `tools/ai_arena/baseline_ai.*`，之後不修改，只有對戰工具會用到。它只依賴 `gomoku_core`，同樣遵守 core 的限制（不用 Qt、不讀系統時間）。
+- `tools/ai_arena`：命令列程式，連結 `gomoku_app`。每場用 GameController 加上 `attachAI` 跑，和人機模式走同一條路（tick 50 ms、兩方輪流先決策）；A 方每場輪流執黑、執白，第 g 場的 seed 由 `--seed` 與 g 決定，同樣的參數一定得到同樣的結果。量測 `decide` 計算時間用 `std::chrono::steady_clock`，只在工具裡使用，不進 core。
+
 AI 決策流程（對應 spec A4–A9a，順序 A4 → A5 → A8a → A6 → A7 → A8b → A9）：
 
 ```mermaid
@@ -558,6 +583,8 @@ gomoku-rt/
 │  ├─ core/        # 只連結 gomoku_core
 │  ├─ net/
 │  └─ app/
+├─ tools/
+│  └─ ai_arena/    # AI 對戰跑分工具與凍結的基準 AI（不屬於遊戲本體）
 └─ .github/workflows/ci.yml
 ```
 
@@ -571,7 +598,7 @@ gomoku-rt/
 |app|GoogleTest + QtCore（`QCoreApplication`，不開視窗）。不用 GameClock，手動指定時間呼叫 `submit` / `tick`|
 |net|protocol 編解碼用單元測試；連線行為用 localhost 的整合測試|
 |ui|手動測試，清單在 `tasks.md`|
-|AI|棋型與評分用單元測試（用小盤面字串建立棋盤，`#` 表示已摧毀的格子）；外加 AI 對 AI 的煙霧測試（限時、達分各 50 場）|
+|AI|棋型與評分用單元測試（用小盤面字串建立棋盤，`#` 表示已摧毀的格子）；外加 AI 對 AI 的煙霧測試（限時、達分各 50 場）。AI 強化（Phase 7）另外用 `ai_arena` 對基準 AI 跑分（spec §11），不放進 ctest；ctest 只跑 4 場確認工具能正常結束|
 
 測試名稱要包含規則編號，例如 `TEST(EnergyTest, E3_CatchUpAfterLongGap)`。
 
@@ -585,6 +612,8 @@ gomoku-rt/
 |連線架構用 client-server 還是 P2P？|client-server，主機權威|只有主機的 GameController 能判定，兩人同時下同一格時以主機先收到的為準，不會出現雙方狀態不一致|
 |AI 用單純評分還是 minimax + α-β 剪枝？|規則優先 + 評分|即時制沒有太多時間慢慢搜尋|
 |AI 要不要分難度？|不分，固定反應時間 350 ms|原本難度只影響反應時間，統一成最強的一種，少一個設定也少一組測試|
+|AI 反應時間要不要縮短？|維持 350 ms|AI 對 AI 實驗（各 400 場）：100 ms、200 ms 對 350 ms 的勝率都在 44%–48%，沒有變強；反應時間只要短於回能間隔就幾乎不影響勝負，瓶頸在能量|
+|AI 強化怎麼跑分？|以無技能對戰為準，有技能只確認不退步|同樣的棋力差距，有技能時量到的勝率比無技能低 5–7 個百分點（技能組合的勝負蓋過下子的差異）|
 |連五後結束，還是消除並計分？|消除並計分|即時制下一條連五就結束太快；消除後棋盤會空出來，對局可以持續，搭配限時或達分決定勝負|
 |技能用冷卻還是耗能量？|耗能量（目前三項都是 1 格；炸彈暫停使用），沒有冷卻|技能和下子搶同一份資源，要在「多下幾子」和「放技能」之間取捨；也少了一套冷卻計時|
 |禁區要不要公開？|公開|禁區直接影響對手能不能下，看不到只會讓對手一直被拒絕；霸道剩餘次數則不公開，保留心理戰|

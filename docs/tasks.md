@@ -244,6 +244,40 @@
 
 ---
 
+## Phase 7　AI 強化
+
+> 每項做完都要用 `ai_arena` 對基準 AI 跑分，達到 spec §11 的門檻，結果記在 `docs/ai_benchmark.md`。T25 之後各項的規則條文，做到時再提案修改 spec。
+
+- [ ] **T24 AI 對戰工具與基準 AI**　規格：§11、A1、A2a、design §4.8
+    - 新增介面 `AIPlayer`（`src/core/ai_player.h`）：`chooseSkill`、`decide`、`newGame`；`AIEngine` 實作它；`GameController::attachAI` 改收 `std::unique_ptr<AIPlayer>`，`LocalSession::attachAI` 跟著改
+    - `AIConfig` 新增 `useSkills`（預設 `true`）：`false` 時不使用技能、不套用 A9a
+    - 以上完成後，把 AIEngine 原樣複製成 `BaselineAI`（`tools/ai_arena/baseline_ai.*`），之後不修改
+    - 新增 `tools/ai_arena`（命令列程式，連結 gomoku_app）：
+        - 用 GameController + `attachAI` 跑對局（tick 50 ms、兩方輪流先決策，design §4.8）；A 方每場輪流執黑、執白
+        - 參數：`--games N`（預設 400）、`--mode time|score|both`（預設 both）、`--seed S`、`--skill none|random|dominate|destroy`（預設 none）、`--a new|baseline`、`--b new|baseline`（預設 A 為 new、B 為 baseline）
+        - 輸出：A 方勝、負、和與勝率（含 95% 信賴區間）、執黑與執白各自的勝率、雙方平均分數、平均技能使用次數、被拒絕的請求依原因統計、超過 30 分鐘沒結束的場數、`decide` 的平均與最長計算時間
+    - 測試：
+        - `useSkills = false` 時：該用摧毀、霸道的盤面改成下子；A9a 不保留能量（A5、A8a、A8b、A9a）
+        - 信賴區間計算（固定輸入，比對數值）
+        - 同樣的參數跑兩次，結果完全相同
+        - ctest 跑 `ai_arena --games 4` 能正常結束
+        - 原本的 AI 測試全部通過
+    - 新增 `docs/ai_benchmark.md`，記錄 new 對 baseline 無技能、有技能各一筆（這時兩邊是同一份程式，勝率應接近 50%，順便確認工具沒有偏差）
+    - README 加上對戰工具的用法
+- [ ] **T25 連續衝四搜尋**（細節到時候提案）
+    - 進攻：找出「每一手都是衝四、最後成雙四或四三」的連續攻擊並執行
+    - 防守：對手有這種連續攻擊時，在它開始前先擋
+- [ ] **T26 能量管理與推算對手能量**（細節到時候提案）
+    - 保留防守能量；存夠能量再進攻；不重要的棋不急著下（取代 A9a）
+    - spec 預定修改：A3 改為「不能直接讀取，但可以從公開資訊推算」；E5、M1a 配合修改；新增 A14 推算對手的能量、下子間隔與霸道次數（觀察新棋子、被消除的連線、已摧毀的格子、禁區與揭露的技能；霸道疊加看不出來，推算值可能偏高）
+    - `AIEngine` 要多收回能間隔、開局能量、能量上限
+- [ ] **T27 比分與剩餘時間**（細節到時候提案）
+    - 刪除 spec §8.2「AI 不考慮雙方比分與剩餘時間」；領先時偏防守、落後時偏進攻；限時快結束時依比分改變策略，同分時考慮盤面分（W11）
+- [ ] **T28 用對戰工具調參數**
+    - 調整 `w`、棋型分數與 T26 的能量門檻
+
+---
+
 ## 手動測試清單
 
 ### A　本機（T14、T14a）
