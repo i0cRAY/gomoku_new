@@ -5,6 +5,7 @@
 #include <random>
 #include <vector>
 
+#include "core/ai_player.h"
 #include "core/board.h"
 #include "core/config.h"
 #include "core/player_view.h"
@@ -14,18 +15,18 @@
 enum class Pattern { Five, OpenFour, Four, OpenThree, Three, OpenTwo, Two, None };
 
 // AI 引擎（spec A1–A12）。亂數使用以 seed 初始化的 std::mt19937（A11）
-class AIEngine {
+class AIEngine : public AIPlayer {
 public:
     static constexpr int kDirectionCount = 4;  // 橫、直、右下斜、右上斜
 
     // 反應時間（A2）、w 與評分表取自 AIConfig；技能耗能與範圍取自 SkillConfig
     AIEngine(PlayerId self, const AIConfig&, const SkillConfig&, std::uint32_t seed);
 
-    SkillId chooseSkill();  // A2a：技能選擇階段隨機選一項
+    SkillId chooseSkill() override;  // A2a：技能選擇階段隨機選一項
     // A1–A9：反應時間未到，或判斷本次不行動時回傳 nullopt。
     // 只拿得到自己的 PlayerView，讀不到對手的能量與冷卻（A3、E5）；下子間隔從 view.placeCooldownRemaining 判斷
-    std::optional<Action> decide(const PlayerView&);
-    void newGame();  // 新的一局對局時間從 0 重新開始，重設反應時間的計時
+    std::optional<Action> decide(const PlayerView&) override;
+    void newGame() override;  // 新的一局對局時間從 0 重新開始，重設反應時間的計時
 
     // pos 必須是空格：回傳假設 player 下在 pos 後，dirIndex 方向最強的棋型。
     // 邊界、對手棋子與已摧毀的格子都視為擋住（A13）；禁區不在 Board 上，所以照空格判斷（spec §8.2）
@@ -73,5 +74,6 @@ private:
     PatternScores scores;
     SkillConfig skills;  // spec S2 各技能的消耗、SB3 炸彈範圍、SX2 摧毀範圍
     int destroyMinGain;  // spec A8b
+    bool useSkills;      // spec §11 無技能跑分
     std::optional<TimeMs> lastDecision;
 };

@@ -797,3 +797,57 @@ TEST(AIDecisionTest, A3_E5_DecideOnlyTakesOwnView) {
                                         const PlayerView&>);
     SUCCEED();
 }
+
+// ---- spec §11：useSkills = false（只給 ai_arena 的無技能跑分使用，design §4.8）----
+
+namespace {
+
+AIEngine noSkillEngine() {
+    AIConfig config;
+    config.useSkills = false;
+    return AIEngine(PlayerId::Black, config, SkillConfig{}, 1);
+}
+
+}  // namespace
+
+TEST(AIDecisionTest, A5b_UseSkillsOffBlocksInsteadOfDestroying) {
+    EXPECT_TRUE(AIConfig{}.useSkills);
+    AIEngine ai = noSkillEngine();
+    ViewSpec spec = rowSpec("..OOOO...");  // 雙四：選摧毀的 AI 原本會摧毀（A5b）
+    spec.skill = SkillId::Destroy;
+    EXPECT_TRUE(placedIn(ai.decide(viewOf(spec)), cells({{1, 7}, {6, 7}})));
+}
+
+TEST(AIDecisionTest, A5b_UseSkillsOffCannotPlaceDoesNothing) {
+    AIEngine ai = noSkillEngine();
+    ViewSpec spec = rowSpec(".XOOOO...");
+    spec.skill = SkillId::Destroy;
+    spec.cooldownRemaining = 300;  // 原本會改用摧毀
+    EXPECT_EQ(ai.decide(viewOf(spec)), std::nullopt);
+}
+
+TEST(AIDecisionTest, A8a_UseSkillsOffMakesOpenFourInsteadOfDominate) {
+    AIEngine ai = noSkillEngine();
+    ViewSpec spec = rowSpec("...XXX...");
+    spec.dominateCharges = 0;
+    EXPECT_TRUE(placedIn(ai.decide(viewOf(spec)), cells({{2, 7}, {6, 7}})));
+}
+
+TEST(AIDecisionTest, A8b_UseSkillsOffDoesNotDestroyForGain) {
+    AIEngine ai = noSkillEngine();
+    ViewSpec spec{{"", "", "..O.O", "", "..O"}};
+    spec.skill = SkillId::Destroy;
+    const auto action = ai.decide(viewOf(spec));
+    EXPECT_FALSE(skillOf(action).has_value());
+    EXPECT_TRUE(placedAt(action).has_value());
+}
+
+TEST(AIDecisionTest, A9a_UseSkillsOffKeepsNoReserve) {
+    for (SkillId skill : {SkillId::Dominate, SkillId::Destroy}) {
+        AIEngine ai = noSkillEngine();
+        ViewSpec spec = rowSpec(".....X...");
+        spec.skill = skill;
+        spec.energy = 1;  // 原本會為技能保留
+        EXPECT_TRUE(placedAt(ai.decide(viewOf(spec))).has_value()) << static_cast<int>(skill);
+    }
+}

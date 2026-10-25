@@ -43,6 +43,7 @@ struct AIConfig {
     TimeMs reactionTime = 350;   // spec A2，不分難度
     double defenseWeight = 0.8;  // spec A10
     int destroyMinGain = 3;      // spec A8b：主動摧毀的最低「對手子 − 己方子」⚠️待確認
+    bool useSkills = true;       // false：不用技能、不套用 A9a，只給 ai_arena 的無技能跑分（spec §11）
     PatternScores scores;
 };
 

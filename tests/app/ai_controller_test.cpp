@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <memory>
 #include <vector>
 
 #include "app/game_controller.h"
@@ -36,7 +37,9 @@ protected:
         config.skill.destroyCost = 0;
     }
 
-    AIEngine whiteAI(std::uint32_t seed = 3) { return AIEngine(PlayerId::White, config.ai, config.skill, seed); }
+    std::unique_ptr<AIEngine> whiteAI(std::uint32_t seed = 3) {
+        return std::make_unique<AIEngine>(PlayerId::White, config.ai, config.skill, seed);
+    }
 
     void humanConfirms(GameController& game) {
         game.selectSkill(PlayerId::Black, SkillId::Dominate);
@@ -102,7 +105,7 @@ TEST_F(AIControllerTest, M1a_A3_ShowAiInfoDoesNotChangeWhatAISees) {
         match.showAiInfo = showAiInfo;
         match.regenInterval = 500;
         GameController game{match};
-        game.attachAI(PlayerId::White, AIEngine(PlayerId::White, match.ai, match.skill, 11));
+        game.attachAI(PlayerId::White, std::make_unique<AIEngine>(PlayerId::White, match.ai, match.skill, 11));
         game.selectSkill(PlayerId::Black, SkillId::Bomb);
         game.confirmSkill(PlayerId::Black);
         std::vector<Board> boards;
@@ -148,8 +151,8 @@ TEST_F(AIControllerTest, P5_TwoAIsAlternateFirstMoveEachTick) {
         blackStones = black;
         whiteStones = white;
     });
-    game.attachAI(PlayerId::Black, AIEngine(PlayerId::Black, config.ai, config.skill, 1));
-    game.attachAI(PlayerId::White, AIEngine(PlayerId::White, config.ai, config.skill, 2));
+    game.attachAI(PlayerId::Black, std::make_unique<AIEngine>(PlayerId::Black, config.ai, config.skill, 1));
+    game.attachAI(PlayerId::White, std::make_unique<AIEngine>(PlayerId::White, config.ai, config.skill, 2));
     for (TimeMs t : {0, 500, 1000}) {
         game.tick(t);
     }
@@ -206,8 +209,8 @@ void runSmokeGames(MatchMode mode) {
         match.mode = mode;
 
         GameController controller{match};
-        controller.attachAI(PlayerId::Black, AIEngine(PlayerId::Black, match.ai, match.skill, game * 2 + 1));
-        controller.attachAI(PlayerId::White, AIEngine(PlayerId::White, match.ai, match.skill, game * 2 + 2));
+        controller.attachAI(PlayerId::Black, std::make_unique<AIEngine>(PlayerId::Black, match.ai, match.skill, game * 2 + 1));
+        controller.attachAI(PlayerId::White, std::make_unique<AIEngine>(PlayerId::White, match.ai, match.skill, game * 2 + 2));
         ASSERT_EQ(controller.viewFor(PlayerId::Black).status, GameStatus::Countdown) << "game " << game;
 
         TimeMs t = -match.countdown;

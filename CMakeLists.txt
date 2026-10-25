@@ -80,6 +80,19 @@ add_executable(gomoku
 set_target_properties(gomoku PROPERTIES AUTOMOC ON)
 target_link_libraries(gomoku PRIVATE gomoku_ui)
 
+# AI 對戰跑分工具與凍結的基準 AI（spec §11、design §4.8），不屬於遊戲本體
+add_library(ai_arena_lib STATIC
+    tools/ai_arena/baseline_ai.cpp
+    tools/ai_arena/arena.cpp
+)
+target_include_directories(ai_arena_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/tools/ai_arena)
+target_link_libraries(ai_arena_lib PUBLIC gomoku_app)
+
+add_executable(ai_arena
+    tools/ai_arena/main.cpp
+)
+target_link_libraries(ai_arena PRIVATE ai_arena_lib)
+
 # 測試
 include(CTest)
 if(BUILD_TESTING)
@@ -141,4 +154,12 @@ if(BUILD_TESTING)
     )
     target_link_libraries(ui_tests PRIVATE gomoku_ui GTest::gtest_main)
     gtest_discover_tests(ui_tests)
+
+    add_executable(tools_tests
+        tests/app/main.cpp
+        tests/tools/arena_test.cpp
+    )
+    target_link_libraries(tools_tests PRIVATE ai_arena_lib GTest::gtest)
+    gtest_discover_tests(tools_tests)
+    add_test(NAME AiArena.Spec11_RunsFourGames COMMAND ai_arena --games 4)
 endif()

@@ -1,5 +1,9 @@
 #include "app/local_session.h"
 
+#include <memory>
+
+#include "core/ai_engine.h"
+
 LocalSession::LocalSession(MatchConfig config, PlayerId localPlayer, QObject* parent)
     : GameSession(parent), config(config), localPlayer(localPlayer), controller(config) {
     connect(&controller, &GameController::stateChanged, this, &GameSession::stateChanged);
@@ -54,7 +58,7 @@ void LocalSession::leave() {
 }
 
 void LocalSession::attachAI(PlayerId player, std::uint32_t seed) {
-    controller.attachAI(player, AIEngine(player, config.ai, config.skill, seed));
+    controller.attachAI(player, std::make_unique<AIEngine>(player, config.ai, config.skill, seed));
     if (controller.viewFor(player).status == GameStatus::Countdown && !gameClock.isRunning()) {
         gameClock.start(-config.countdown);
     }

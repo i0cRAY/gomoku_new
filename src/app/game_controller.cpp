@@ -63,7 +63,7 @@ void GameController::tick(TimeMs now) {
     emit stateChanged();
 }
 
-void GameController::attachAI(PlayerId player, AIEngine ai) {
+void GameController::attachAI(PlayerId player, std::unique_ptr<AIPlayer> ai) {
     ais[indexOf(player)] = std::move(ai);
     if (status == GameStatus::SkillSelect) {
         letAIChooseSkill(player);

@@ -138,7 +138,8 @@ AIEngine::AIEngine(PlayerId self, const AIConfig& ai, const SkillConfig& skill, 
       rng(seed),
       scores(ai.scores),
       skills(skill),
-      destroyMinGain(ai.destroyMinGain) {}
+      destroyMinGain(ai.destroyMinGain),
+      useSkills(ai.useSkills) {}
 
 SkillId AIEngine::chooseSkill() {
     constexpr SkillId kSkills[] = {SkillId::Dominate, SkillId::Destroy};  // A2a；炸彈暫停使用（S1b）
@@ -270,6 +271,9 @@ bool AIEngine::canPlace(const PlayerView& view) const {
 }
 
 bool AIEngine::skillReady(const PlayerView& view, SkillId skill) const {
+    if (!useSkills) {
+        return false;
+    }
     if (skill == SkillId::Destroy && view.self.destroyUsed) {
         return false;  // SX3
     }
@@ -280,9 +284,9 @@ bool AIEngine::skillReadyWithSpare(const PlayerView& view, SkillId skill) const 
     return skillReady(view, skill) && view.self.energy >= skills.costOf(skill) + kPlaceEnergy;
 }
 
-// A9a：下子後能量仍 ≥ 自己技能的消耗；摧毀已用過時沒有技能要存能量
+// A9a：下子後能量仍 ≥ 自己技能的消耗；摧毀已用過或不用技能時沒有技能要存能量
 bool AIEngine::keepsReserve(const PlayerView& view) const {
-    if (view.self.skill == SkillId::Destroy && view.self.destroyUsed) {
+    if (!useSkills || (view.self.skill == SkillId::Destroy && view.self.destroyUsed)) {
         return true;
     }
     return view.self.energy - kPlaceEnergy >= skills.costOf(view.self.skill);

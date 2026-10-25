@@ -248,7 +248,7 @@
 
 > 每項做完都要用 `ai_arena` 對基準 AI 跑分，達到 spec §11 的門檻，結果記在 `docs/ai_benchmark.md`。T25 之後各項的規則條文，做到時再提案修改 spec。
 
-- [ ] **T24 AI 對戰工具與基準 AI**　規格：§11、A1、A2a、design §4.8
+- [x] **T24 AI 對戰工具與基準 AI**　規格：§11、A1、A2a、design §4.8
     - 新增介面 `AIPlayer`（`src/core/ai_player.h`）：`chooseSkill`、`decide`、`newGame`；`AIEngine` 實作它；`GameController::attachAI` 改收 `std::unique_ptr<AIPlayer>`，`LocalSession::attachAI` 跟著改
     - `AIConfig` 新增 `useSkills`（預設 `true`）：`false` 時不使用技能、不套用 A9a
     - 以上完成後，把 AIEngine 原樣複製成 `BaselineAI`（`tools/ai_arena/baseline_ai.*`），之後不修改

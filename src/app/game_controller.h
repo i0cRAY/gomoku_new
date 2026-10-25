@@ -3,10 +3,11 @@
 #include <QObject>
 
 #include <array>
+#include <memory>
 #include <optional>
 #include <vector>
 
-#include "core/ai_engine.h"
+#include "core/ai_player.h"
 #include "core/board.h"
 #include "core/config.h"
 #include "core/energy_manager.h"
@@ -33,7 +34,7 @@ public:
     void abort();  // G4a、G4b、W5：狀態變成 Aborted，不計勝負；已結束時忽略
     // M1：由 AI 操作這一方。技能選擇階段自動選技能並確定（A2a）；對局中每次 tick 決策，
     // 動作一律經過 submit（A1），AI 只拿得到 viewFor(這一方)（A3、E5）
-    void attachAI(PlayerId, AIEngine);
+    void attachAI(PlayerId, std::unique_ptr<AIPlayer>);
 
 signals:
     void stateChanged();  // 收到後呼叫 viewFor(自己) 取資料
@@ -77,6 +78,6 @@ private:
     std::vector<ClearedLine> lastClearedLines;
     bool overtime = false;                          // W10
     std::optional<std::array<int, 2>> boardScores;  // W11：用盤面分決勝時才有值
-    std::array<std::optional<AIEngine>, 2> ais{};
+    std::array<std::unique_ptr<AIPlayer>, 2> ais{};
     PlayerId firstAI = PlayerId::Black;  // 兩方都是 AI 時，這次 tick 先決策的一方（每次輪流，design §4.8）
 };

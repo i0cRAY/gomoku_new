@@ -86,6 +86,27 @@ ctest --test-dir build --output-on-failure   # 測試（沒有螢幕的環境請
 4. 雙方的程式版本要相同。協定版本不同時會拒絕連線並顯示提示。
 5. 超過 5 秒沒有收到對方的訊息時，畫面會顯示「連線中斷」。
 
+## AI 對戰跑分
+
+`ai_arena` 讓目前的 AI（`new`）和凍結的基準 AI（`baseline`，T24 時的版本）大量對戰，用來判斷 AI 有沒有變強（spec §11）。規則和人機模式完全相同，只是時間用模擬的，所以一場只要零點幾秒。請用 Release 建置：
+
+```bash
+cmake -B build-release -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
+cmake --build build-release -j --target ai_arena
+./build-release/ai_arena                  # 無技能，限時、達分各 400 場
+./build-release/ai_arena --skill random   # 雙方隨機選技能（A2a）
+```
+
+|參數|值|預設|
+|---|---|---|
+|`--games N`|每種模式的場數|400|
+|`--mode`|`time`、`score`、`both`|`both`|
+|`--seed S`|亂數種子，同樣的參數一定得到同樣的結果|1|
+|`--skill`|`none`（雙方都不用技能、不保留能量）、`random`、`dominate`、`destroy`|`none`|
+|`--a`、`--b`|`new` 或 `baseline`|A 為 `new`、B 為 `baseline`|
+
+輸出 A 方的勝率（和局算半場）與 95% 信賴區間、執黑與執白各自的勝率、平均分數與技能次數、被拒絕的請求、沒有結束的場數，以及 `decide` 的計算時間。每次的結果記在 [`docs/ai_benchmark.md`](docs/ai_benchmark.md)。
+
 ## 專案結構
 
 ```
@@ -93,7 +114,8 @@ src/core   規則、能量、技能、AI（純 C++，不依賴 Qt，時間與亂
 src/net    區網協定與連線（QtNetwork）
 src/app    GameController、本機／主機／加入方的 GameSession（QtCore）
 src/ui     畫面（QtWidgets、QtMultimedia）
-tests/     GoogleTest，依 core / app / net / ui 分開
+tests/     GoogleTest，依 core / app / net / ui / tools 分開
+tools/     ai_arena：AI 對戰跑分工具與凍結的基準 AI（不屬於遊戲本體）
 docs/      spec.md（規則）、design.md（架構）、tasks.md（任務與手動測試清單）
 scripts/   素材處理與規格對照腳本
 ```
