@@ -149,6 +149,9 @@ struct AIConfig {
     TimeMs reactionTime = 350;           // spec A2，不分難度
     double defenseWeight = 0.8;          // spec A10
     int destroyMinGain = 3;              // spec A8b：主動摧毀的最低「對手子 − 己方子」
+    bool useSkills = true;               // spec §11：false 只給 ai_arena 的無技能跑分
+    int reserveEnergy = 2;               // spec A15：不緊急的棋下完後至少保留的能量
+    bool countOpponentDestroy = true;    // spec A14a：對手可能還能用摧毀時視為能應對
 };
 
 // spec W11：盤面分，只用來決勝 ⚠️待確認
@@ -384,17 +387,18 @@ signals:
 
 測試時不使用 GameClock，直接呼叫 `controller.tick(t)` 和 `submit(a, t)`，自己指定時間。
 
-### 4.8 AIEngine（`src/core/ai_engine.h`）— spec A1–A13
+### 4.8 AIEngine（`src/core/ai_engine.h`）— spec A1–A18
 
 ```cpp
 enum class Pattern { Five, OpenFour, Four, OpenThree, Three, OpenTwo, Two, None };
 
 class AIEngine {
 public:
-    AIEngine(PlayerId self, const AIConfig&, const SkillConfig&, std::uint32_t seed);
+    // AIConfig、SkillConfig 與推算對手需要的回能間隔、開局能量、能量上限、下子間隔都取自 MatchConfig（spec A14）
+    AIEngine(PlayerId self, const MatchConfig&, std::uint32_t seed);
     SkillId chooseSkill();   // 技能選擇階段呼叫，用同一個 seed 的亂數從開放的技能（霸道、摧毀）中隨機選（spec A2a、S1b）
     // 反應時間未到，或判斷本次不行動時，回傳 nullopt
-    // 只拿得到自己的 PlayerView，讀不到對手的不公開資訊（spec A3、E5）；禁區從 view.zones 讀
+    // 只拿得到自己的 PlayerView，讀不到對手的不公開資訊（spec A3、E5），對手的能量只能用 OpponentModel 推算；禁區從 view.zones 讀
     // 下子間隔是否已過從 view.placeCooldownRemaining 判斷
     std::optional<Action> decide(const PlayerView&);
     // 以下公開，方便單元測試
@@ -407,6 +411,28 @@ public:
 AIEngine 只回傳「想做的動作」，由 GameController 的 `tick` 呼叫它，再把結果丟進 `submit`。所以 AI 一定會通過和玩家相同的規則檢查（spec A1）。兩方都是 AI 時（AI 對 AI 測試），同一次 `tick` 裡兩個 AI 的決策先後每次輪流，對局開始（含再來一局）的第一次 `tick` 由黑方先；否則先決策的一方永遠先搶到兩邊都想下的格子。亂數使用 `std::mt19937`，以建構時傳入的 seed 初始化（spec A11）。
 
 所有「下在某格」的候選都先排除對手的禁區（spec A5a），流程圖不另外畫出。
+
+#### OpponentModel（`src/core/opponent_model.h`）— spec A14、A14a
+
+```cpp
+class OpponentModel {
+public:
+    OpponentModel(PlayerId self, const MatchConfig&);
+    void observe(const PlayerView&);  // A14：比對上一次的 view，記錄對手的下子、摧毀、霸道
+    void reset();                     // 新的一局
+    int energy() const;               // 推算的目前能量（E2–E4）
+    // A14a：從最後一次 observe 起 within 毫秒內，對手最多能下幾子（反應時間當作 0）
+    int placementsWithin(TimeMs within) const;
+    bool mayDestroy() const;          // 對手還沒揭露技能，或揭露的是摧毀但還沒用過
+    // A14a：within 內能下至少一子，或（countDestroy 時）可能還能用摧毀且能量夠
+    bool canRespondWithin(TimeMs within, bool countDestroy) const;
+};
+```
+
+- AIEngine 持有一個 OpponentModel。`decide` 一開始（檢查反應時間之前）先呼叫 `observe`，所以每次 tick 都會觀察（spec A14）；`newGame` 時 `reset`。
+- 只用 `PlayerView` 裡的公開資訊（棋盤、`lastClearedLines`、`zones`、`opponentSkillRevealed`、`now`），型別上仍然拿不到對手的 PlayerState（spec E5）。
+- 「當場連成五被消除」的子：`lastClearedLines` 和上一次觀察到的不同，且屬於對手、含有上一次是空格的格子，就算一次下子；同一批消除只算一次。
+- 純 C++，可以單獨寫單元測試：直接餵一連串手寫的 PlayerView。
 
 #### AIPlayer 介面與基準 AI（spec §11 的 AI 強化跑分）
 
@@ -429,17 +455,18 @@ void attachAI(PlayerId, std::unique_ptr<AIPlayer>);
 std::array<std::unique_ptr<AIPlayer>, 2> ais;
 ```
 
-- `AIConfig::useSkills`（預設 `true`）：`false` 時 AI 不使用技能，`A9a` 也不套用，只給對戰工具的「無技能」跑分使用，遊戲本體一律是 `true`。
-- `BaselineAI`：T24 開始時把 AIEngine（含 `useSkills`）原樣複製一份，放在 `tools/ai_arena/baseline_ai.*`，之後不修改，只有對戰工具會用到。它只依賴 `gomoku_core`，同樣遵守 core 的限制（不用 Qt、不讀系統時間）。
+- `AIConfig::useSkills`（預設 `true`）：`false` 時 AI 不使用技能，`A15` 的保留能量也不考慮技能消耗，只給對戰工具的「無技能」跑分使用，遊戲本體一律是 `true`。
+- `BaselineAI`：T24 開始時把 AIEngine（含 `useSkills`，當時的保留能量規則是已刪除的 A9a）原樣複製一份，放在 `tools/ai_arena/baseline_ai.*`，之後不修改，只有對戰工具會用到。它只依賴 `gomoku_core`，同樣遵守 core 的限制（不用 Qt、不讀系統時間）。
 - `tools/ai_arena`：命令列程式，連結 `gomoku_app`。每場用 GameController 加上 `attachAI` 跑，和人機模式走同一條路（tick 50 ms、兩方輪流先決策）；A 方每場輪流執黑、執白，第 g 場的 seed 由 `--seed` 與 g 決定，同樣的參數一定得到同樣的結果。量測 `decide` 計算時間用 `std::chrono::steady_clock`，只在工具裡使用，不進 core。
 
-AI 決策流程（對應 spec A4–A9a，順序 A4 → A5 → A8a → A6 → A7 → A8b → A9）：
+AI 決策流程（對應 spec A4–A18，順序 A4 → A5 → A8a → A6（含 A16）→ A7 → A17 → A18 → A8b → A9（含 A15））：
 
 ```mermaid
 %%{init: {"flowchart": {"useMaxWidth": true}, "themeVariables": {"fontSize": "12px"}}}%%
 flowchart TD
 Place{"能量 ≥ 1 且<br/>下子間隔已過？"}
-Start([GameController tick]) --> Ready{"反應時間到了？"}
+Start([GameController tick]) --> Observe["A14 OpponentModel<br/>觀察這次的 view"]
+Observe --> Ready{"反應時間到了？"}
 Ready -->|否| End([本次不行動])
 Ready -->|是| Win{"A4 自己<br/>一步成五？"}
 Win -->|是| Place
@@ -454,14 +481,18 @@ Destroy -->|"否，不能下子"| End
 BlockOne --> Place
 Threat -->|否| Dom{"A8a 選了霸道、次數為 0、<br/>能量 ≥ 1 且自己有活三以上？"}
 Dom -->|是| UseDom[使用霸道]
-Dom -->|否| Four{"A6 自己能<br/>做活四？"}
+Dom -->|否| Four{"A6 自己能做活四，<br/>且 A16 能接著成五？"}
 Four -->|是| Place
 Four -->|否| Three{"A7 對手<br/>有活三？"}
 Three -->|是| Place
-Three -->|否| Gain{"A8b 選了摧毀、沒用過、能量 ≥ 2<br/>且最佳差值 ≥ 3？"}
+Three -->|否| Rush{"A17 能量 ≥ 3、對手 850 ms 內<br/>不能應對、能做活三？"}
+Rush -->|是| Place
+Rush -->|否| Snipe{"A18 能量 ≥ 2、對手 850 ms 內<br/>不能應對、能做衝四？"}
+Snipe -->|是| Place
+Snipe -->|否| Gain{"A8b 選了摧毀、沒用過、能量 ≥ 2<br/>且最佳差值 ≥ 3？"}
 Gain -->|是| UseDestroy
-Gain -->|否| Reserve{"A9a 下子後能量<br/>≥ 技能消耗？"}
-Reserve -->|"否（摧毀已用過除外）"| End
+Gain -->|否| Reserve{"A15 下子後能量<br/>≥ 保留能量 R？"}
+Reserve -->|否| End
 Reserve -->|是| Eval["A9 / A10 全盤評分<br/>選最高分"]
 Eval --> Place
 Place -->|是| Send["回傳 Action<br/>交給 GameController::submit"]
