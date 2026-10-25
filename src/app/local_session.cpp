@@ -58,7 +58,7 @@ void LocalSession::leave() {
 }
 
 void LocalSession::attachAI(PlayerId player, std::uint32_t seed) {
-    controller.attachAI(player, std::make_unique<AIEngine>(player, config.ai, config.skill, seed));
+    controller.attachAI(player, std::make_unique<AIEngine>(player, config, seed));
     if (controller.viewFor(player).status == GameStatus::Countdown && !gameClock.isRunning()) {
         gameClock.start(-config.countdown);
     }

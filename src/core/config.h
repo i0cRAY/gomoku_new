@@ -43,7 +43,9 @@ struct AIConfig {
     TimeMs reactionTime = 350;   // spec A2，不分難度
     double defenseWeight = 0.8;  // spec A10
     int destroyMinGain = 3;      // spec A8b：主動摧毀的最低「對手子 − 己方子」⚠️待確認
-    bool useSkills = true;       // false：不用技能、不套用 A9a，只給 ai_arena 的無技能跑分（spec §11）
+    bool useSkills = true;       // false：不用技能，A15 也不考慮技能消耗；只給 ai_arena 的無技能跑分（spec §11）
+    int reserveEnergy = 2;       // spec A15：不緊急的棋下完後至少保留的能量 ⚠️待確認
+    bool countOpponentDestroy = true;  // spec A14a：對手可能還能用摧毀時視為能應對 ⚠️待確認
     PatternScores scores;
 };
 

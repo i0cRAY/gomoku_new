@@ -19,6 +19,7 @@ add_library(gomoku_core STATIC
     src/core/skill_system.cpp
     src/core/zone_map.cpp
     src/core/ai_engine.cpp
+    src/core/opponent_model.cpp
 )
 target_include_directories(gomoku_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
@@ -117,6 +118,7 @@ if(BUILD_TESTING)
         tests/core/ai_pattern_test.cpp
         tests/core/ai_score_test.cpp
         tests/core/ai_decision_test.cpp
+        tests/core/opponent_model_test.cpp
     )
     target_link_libraries(core_tests PRIVATE gomoku_core GTest::gtest_main)
     gtest_discover_tests(core_tests)

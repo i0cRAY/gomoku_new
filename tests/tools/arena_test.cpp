@@ -46,12 +46,14 @@ TEST(ArenaArgsTest, Spec11_Defaults) {
     EXPECT_EQ(options->skill, ArenaSkill::None);
     EXPECT_EQ(options->a, ArenaEngine::New);
     EXPECT_EQ(options->b, ArenaEngine::Baseline);
+    EXPECT_FALSE(options->reserve.has_value());
 }
 
 TEST(ArenaArgsTest, Spec11_ParsesAllOptions) {
     std::string error;
     const auto options = parseArenaArgs(
-        {"--games", "12", "--mode", "score", "--seed", "7", "--skill", "destroy", "--a", "baseline", "--b", "new"},
+        {"--games", "12", "--mode", "score", "--seed", "7", "--skill", "destroy", "--a", "baseline", "--b", "new",
+         "--reserve", "3"},
         error);
     ASSERT_TRUE(options.has_value()) << error;
     EXPECT_EQ(options->games, 12);
@@ -60,12 +62,13 @@ TEST(ArenaArgsTest, Spec11_ParsesAllOptions) {
     EXPECT_EQ(options->skill, ArenaSkill::Destroy);
     EXPECT_EQ(options->a, ArenaEngine::Baseline);
     EXPECT_EQ(options->b, ArenaEngine::New);
+    EXPECT_EQ(options->reserve, std::optional<int>(3));
 }
 
 TEST(ArenaArgsTest, Spec11_RejectsInvalidArguments) {
     for (const std::vector<std::string>& args : std::vector<std::vector<std::string>>{
              {"--games", "0"}, {"--games", "abc"}, {"--games"}, {"--mode", "fast"}, {"--skill", "bomb"},
-             {"--a", "old"}, {"--seed", "-1"}, {"--unknown"}}) {
+             {"--a", "old"}, {"--seed", "-1"}, {"--reserve", "x"}, {"--unknown"}}) {
         std::string error;
         EXPECT_FALSE(parseArenaArgs(args, error).has_value()) << args[0];
         EXPECT_FALSE(error.empty());
@@ -160,4 +163,12 @@ TEST(ArenaFormatTest, Spec11_ReportShowsRateAndRejections) {
     EXPECT_NE(text.find("75.0%"), std::string::npos) << text;
     EXPECT_NE(text.find("能量不足 2"), std::string::npos) << text;
     EXPECT_NE(text.find("限時"), std::string::npos) << text;
+}
+
+TEST(ArenaRunTest, A15_ReserveOptionChangesNewEngineOnly) {
+    ArenaOptions keep = twoGames(ArenaSkill::None);
+    keep.reserve = 9;  // 幾乎不下不緊急的棋
+    const ArenaResult held = runArena(keep, MatchMode::ScoreTarget);
+    const ArenaResult normal = runArena(twoGames(ArenaSkill::None), MatchMode::ScoreTarget);
+    EXPECT_NE(held.a.score * 1000 + held.b.score, normal.a.score * 1000 + normal.b.score);
 }

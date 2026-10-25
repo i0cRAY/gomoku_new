@@ -13,6 +13,14 @@
 
 namespace {
 
+// AIEngine 改收整份 MatchConfig（design §4.8）；其他設定用預設值
+MatchConfig matchOf(const AIConfig& ai, const SkillConfig& skill) {
+    MatchConfig match;
+    match.ai = ai;
+    match.skill = skill;
+    return match;
+}
+
 constexpr TimeMs kReaction = 350;  // spec A2：固定反應時間
 
 struct ViewSpec {
@@ -45,7 +53,7 @@ PlayerView viewOf(const ViewSpec& spec) {
 }
 
 AIEngine engine(std::uint32_t seed = 1) {
-    return AIEngine(PlayerId::Black, AIConfig{}, SkillConfig{}, seed);
+    return AIEngine(PlayerId::Black, matchOf(AIConfig{}, SkillConfig{}), seed);
 }
 
 std::optional<Pos> placedAt(const std::optional<Action>& action) {
@@ -192,7 +200,7 @@ TEST(AIDecisionTest, A5_DoubleThreatWithDominateStillBlocksOne) {
 TEST(AIDecisionTest, A5_DoubleThreatWithBombButNoEnergyForItBlocksOne) {
     SkillConfig skill;
     skill.bombCost = 2;
-    AIEngine ai(PlayerId::Black, AIConfig{}, skill, 1);
+    AIEngine ai(PlayerId::Black, matchOf(AIConfig{}, skill), 1);
     ViewSpec spec{{"", "", "", "", "", "", "", "..OOOO..."}};
     spec.skill = SkillId::Bomb;
     spec.energy = 1;  // 能下子，但不夠用炸彈（2 格）
@@ -458,7 +466,7 @@ TEST(AIDecisionTest, A5b_SX3_UsedDestroyIsNotTriedAgain) {
 TEST(AIDecisionTest, A5b_DestroyNeedsEnergy) {
     SkillConfig skill;
     skill.destroyCost = 3;
-    AIEngine ai(PlayerId::Black, AIConfig{}, skill, 1);
+    AIEngine ai(PlayerId::Black, matchOf(AIConfig{}, skill), 1);
     ViewSpec spec = rowSpec("..OOOO...");
     spec.skill = SkillId::Destroy;
     spec.energy = 2;  // 能下子，但不夠用摧毀（3 格）
@@ -505,7 +513,7 @@ TEST(AIDecisionTest, A8a_A5a_OpenFourPointsInZoneDoNotCount) {
 TEST(AIDecisionTest, A8a_NeedsEnergyForDominate) {
     SkillConfig skill;
     skill.dominateCost = 3;
-    AIEngine ai(PlayerId::Black, AIConfig{}, skill, 1);
+    AIEngine ai(PlayerId::Black, matchOf(AIConfig{}, skill), 1);
     ViewSpec spec = rowSpec("...XXX...");
     spec.dominateCharges = 0;
     spec.energy = 2;  // 不夠用霸道 → 照 A6 做活四
@@ -526,7 +534,7 @@ TEST(AIDecisionTest, A8a_NotUsedWhileChargesRemain) {
 TEST(AIDecisionTest, A8a_EnergyThresholdFollowsSkillCost) {
     SkillConfig skill;
     skill.dominateCost = 5;
-    AIEngine ai(PlayerId::Black, AIConfig{}, skill, 1);
+    AIEngine ai(PlayerId::Black, matchOf(AIConfig{}, skill), 1);
     ViewSpec spec = rowSpec("...XXX...");
     spec.dominateCharges = 0;
     spec.energy = 4;
@@ -601,7 +609,7 @@ TEST(AIDecisionTest, A8b_NotUsedBelowThreshold) {
 TEST(AIDecisionTest, A8b_ThresholdComesFromConfig) {
     AIConfig config;
     config.destroyMinGain = 4;
-    AIEngine ai(PlayerId::Black, config, SkillConfig{}, 1);
+    AIEngine ai(PlayerId::Black, matchOf(config, SkillConfig{}), 1);
     ViewSpec spec{{"", "", "..O.O", "", "..O"}};
     spec.skill = SkillId::Destroy;
     EXPECT_TRUE(placedAt(ai.decide(viewOf(spec))).has_value());
@@ -626,28 +634,55 @@ TEST(AIDecisionTest, A8b_SX3_NotUsedAfterDestroyUsed) {
     EXPECT_TRUE(placedAt(ai.decide(viewOf(spec))).has_value());
 }
 
-// ---- A9a：保留能量 ----
+// ---- A15：保留能量（取代 A9a） ----
 
-TEST(AIDecisionTest, A9a_KeepsEnoughEnergyForOwnSkill) {
-    struct Case {
-        SkillId skill;
-        int holdAt;   // 這個能量時不下子
-        int placeAt;  // 這個能量時下子
-    };
-    for (const Case& c : {Case{SkillId::Bomb, 1, 2}, Case{SkillId::Dominate, 1, 2}, Case{SkillId::Destroy, 1, 2}}) {
-        AIEngine ai = engine();
+namespace {
+
+AIEngine engineWithReserve(int reserve, bool useSkills = true) {
+    AIConfig config;
+    config.reserveEnergy = reserve;
+    config.useSkills = useSkills;
+    return AIEngine(PlayerId::Black, matchOf(config, SkillConfig{}), 1);
+}
+
+}  // namespace
+
+TEST(AIDecisionTest, A15_HoldsWhenBelowReserve) {
+    EXPECT_EQ(AIConfig{}.reserveEnergy, 2);
+    AIEngine ai = engine();
+    ViewSpec spec = rowSpec(".....X...");
+    spec.energy = 2;  // 下完剩 1 < 2
+    EXPECT_EQ(ai.decide(viewOf(spec)), std::nullopt);
+    spec.now += kReaction;
+    spec.energy = 3;
+    EXPECT_TRUE(placedAt(ai.decide(viewOf(spec))).has_value());
+}
+
+TEST(AIDecisionTest, A15_ReserveComesFromConfig) {
+    AIEngine ai = engineWithReserve(4);
+    ViewSpec spec = rowSpec(".....X...");
+    spec.energy = 4;
+    EXPECT_EQ(ai.decide(viewOf(spec)), std::nullopt);
+    spec.now += kReaction;
+    spec.energy = 5;
+    EXPECT_TRUE(placedAt(ai.decide(viewOf(spec))).has_value());
+}
+
+TEST(AIDecisionTest, A15_KeepsAtLeastOwnSkillCost) {
+    for (SkillId skill : {SkillId::Bomb, SkillId::Dominate, SkillId::Destroy}) {
+        AIEngine ai = engineWithReserve(0);
         ViewSpec spec = rowSpec(".....X...");
-        spec.skill = c.skill;
-        spec.energy = c.holdAt;
-        EXPECT_EQ(ai.decide(viewOf(spec)), std::nullopt) << static_cast<int>(c.skill);
+        spec.skill = skill;
+        spec.energy = 1;  // 下完剩 0 < 技能消耗 1
+        EXPECT_EQ(ai.decide(viewOf(spec)), std::nullopt) << static_cast<int>(skill);
         spec.now += kReaction;
-        spec.energy = c.placeAt;
-        EXPECT_TRUE(placedAt(ai.decide(viewOf(spec))).has_value()) << static_cast<int>(c.skill);
+        spec.energy = 2;
+        EXPECT_TRUE(placedAt(ai.decide(viewOf(spec))).has_value()) << static_cast<int>(skill);
     }
 }
 
-TEST(AIDecisionTest, A9a_NoReserveAfterDestroyUsed) {
-    AIEngine ai = engine();
+TEST(AIDecisionTest, A15_NoSkillCostAfterDestroyUsed) {
+    AIEngine ai = engineWithReserve(0);
     ViewSpec spec = rowSpec(".....X...");
     spec.skill = SkillId::Destroy;
     spec.destroyUsed = true;
@@ -655,13 +690,17 @@ TEST(AIDecisionTest, A9a_NoReserveAfterDestroyUsed) {
     EXPECT_TRUE(placedAt(ai.decide(viewOf(spec))).has_value());
 }
 
-TEST(AIDecisionTest, A9a_UrgentMovesIgnoreReserve) {
-    for (std::string_view row : {".XXXX....", ".XOOOO...", "...XXX...", "...OOO..."}) {  // A4、A5、A6、A7
+TEST(AIDecisionTest, A15_UrgentMovesIgnoreReserve) {
+    for (std::string_view row : {".XXXX....", ".XOOOO...", "...OOO..."}) {  // A4、A5、A7
         AIEngine ai = engine();
         ViewSpec spec = rowSpec(row);
         spec.energy = 1;
         EXPECT_TRUE(placedAt(ai.decide(viewOf(spec))).has_value()) << row;
     }
+    AIEngine ai = engine();
+    ViewSpec spec = rowSpec("...XXX...");  // A6：能量 2 才能接著成五（A16），下完剩 1 < R
+    spec.energy = 2;
+    EXPECT_TRUE(placedIn(ai.decide(viewOf(spec)), cells({{2, 7}, {6, 7}})));
 }
 
 // ---- S1a：每種技能的 AI 只用自己的技能 ----
@@ -718,7 +757,7 @@ TEST(AIDecisionTest, A2_ReactionTimeComesFromConfig) {
     EXPECT_EQ(AIConfig{}.reactionTime, kReaction);
     AIConfig config;
     config.reactionTime = 600;
-    AIEngine ai(PlayerId::Black, config, SkillConfig{}, 1);
+    AIEngine ai(PlayerId::Black, matchOf(config, SkillConfig{}), 1);
     ViewSpec spec{{""}};
     spec.now = 0;
     ASSERT_TRUE(ai.decide(viewOf(spec)).has_value());
@@ -745,7 +784,7 @@ TEST(AIDecisionTest, A1_NoPlacementWhileCooldownRemaining) {
 TEST(AIDecisionTest, S2_A5_BombEnergyCostComesFromConfig) {
     SkillConfig skill;
     skill.bombCost = 4;
-    AIEngine ai(PlayerId::Black, AIConfig{}, skill, 1);
+    AIEngine ai(PlayerId::Black, matchOf(AIConfig{}, skill), 1);
     ViewSpec spec{{"", "", "", "", "", "", "", "..OOOO..."}};
     spec.skill = SkillId::Bomb;
     spec.energy = 3;  // 預設耗能 2 夠用，但這裡要 4
@@ -805,7 +844,7 @@ namespace {
 AIEngine noSkillEngine() {
     AIConfig config;
     config.useSkills = false;
-    return AIEngine(PlayerId::Black, config, SkillConfig{}, 1);
+    return AIEngine(PlayerId::Black, matchOf(config, SkillConfig{}), 1);
 }
 
 }  // namespace
@@ -842,12 +881,155 @@ TEST(AIDecisionTest, A8b_UseSkillsOffDoesNotDestroyForGain) {
     EXPECT_TRUE(placedAt(action).has_value());
 }
 
-TEST(AIDecisionTest, A9a_UseSkillsOffKeepsNoReserve) {
+TEST(AIDecisionTest, A15_UseSkillsOffIgnoresSkillCost) {
     for (SkillId skill : {SkillId::Dominate, SkillId::Destroy}) {
-        AIEngine ai = noSkillEngine();
+        AIEngine ai = engineWithReserve(0, false);
         ViewSpec spec = rowSpec(".....X...");
         spec.skill = skill;
-        spec.energy = 1;  // 原本會為技能保留
+        spec.energy = 1;  // 用技能時會為技能保留 1 格
         EXPECT_TRUE(placedAt(ai.decide(viewOf(spec))).has_value()) << static_cast<int>(skill);
     }
+}
+
+// ---- A14、A16–A18：推算對手的能量，存夠能量再出手 ----
+
+namespace {
+
+// 對手（白）開局 0 格能量：對局時間 100 時對手一子都不能下，下一格要到 2000 才回來
+AIEngine engineVsEmptyOpponent(int reserve = 2, int opponentStart = 0) {
+    MatchConfig match;
+    match.startEnergy = opponentStart;  // 雙方開局能量相同；AI 自己的能量由 ViewSpec 指定
+    match.ai.reserveEnergy = reserve;
+    return AIEngine(PlayerId::Black, match, 1);
+}
+
+bool formsPattern(const ViewSpec& spec, const std::optional<Action>& action, Pattern pattern) {
+    const auto pos = placedAt(action);
+    if (!pos) {
+        return false;
+    }
+    const Board board = boardFromRows(spec.rows);
+    for (int d = 0; d < AIEngine::kDirectionCount; ++d) {
+        if (AIEngine::patternAt(board, *pos, PlayerId::Black, d) == pattern) {
+            return true;
+        }
+    }
+    return false;
+}
+
+}  // namespace
+
+TEST(AIDecisionTest, A16_OneEnergyOpenFourWaitsWhenOpponentCanBlockBoth) {
+    AIEngine ai = engine();  // 對局時間 30000：對手推算是滿格
+    ViewSpec spec = rowSpec("...XXX...");
+    spec.energy = 1;
+    EXPECT_EQ(ai.decide(viewOf(spec)), std::nullopt);
+}
+
+TEST(AIDecisionTest, A16_OneEnergyOpenFourWhenOpponentCanBlockOnlyOne) {
+    AIEngine ai = engineVsEmptyOpponent();
+    ViewSpec spec = rowSpec("...XXX...");
+    spec.now = 100;
+    spec.energy = 1;  // 自己下一格在 2100 回來；對手到 2600 前只能下 2000 那一子
+    EXPECT_TRUE(placedIn(ai.decide(viewOf(spec)), cells({{2, 7}, {6, 7}})));
+}
+
+TEST(AIDecisionTest, A16_OneEnergyOpenFourWaitsWhenOpponentCanPlaceTwo) {
+    AIEngine ai = engineVsEmptyOpponent(2, 1);  // 對手現在 1 格，2000 再回 1 格
+    ViewSpec spec = rowSpec("...XXX...");
+    spec.now = 100;
+    spec.energy = 1;
+    EXPECT_EQ(ai.decide(viewOf(spec)), std::nullopt);
+}
+
+TEST(AIDecisionTest, A17_RushesOpenThreeWhenOpponentCannotRespond) {
+    AIEngine ai = engineVsEmptyOpponent(3);  // R = 3：A9 會保留，只有 A17 會下
+    ViewSpec spec = rowSpec("...XX....");
+    spec.now = 100;
+    spec.energy = 3;
+    const auto action = ai.decide(viewOf(spec));
+    EXPECT_TRUE(formsPattern(spec, action, Pattern::OpenThree));
+}
+
+TEST(AIDecisionTest, A17_NeedsThreeEnergy) {
+    AIEngine ai = engineVsEmptyOpponent(3);
+    ViewSpec spec = rowSpec("...XX....");
+    spec.now = 100;
+    spec.energy = 2;
+    EXPECT_EQ(ai.decide(viewOf(spec)), std::nullopt);
+}
+
+TEST(AIDecisionTest, A17_NotWhenOpponentCanRespond) {
+    AIEngine ai = engineVsEmptyOpponent(3, 1);
+    ViewSpec spec = rowSpec("...XX....");
+    spec.now = 100;
+    spec.energy = 3;
+    EXPECT_EQ(ai.decide(viewOf(spec)), std::nullopt);
+}
+
+TEST(AIDecisionTest, A17_A5a_SkipsZoneCells) {
+    AIEngine ai = engineVsEmptyOpponent(3);
+    ViewSpec spec = rowSpec("...XX....");
+    spec.now = 100;
+    spec.energy = 3;
+    spec.zones = {{1, 7}, {2, 7}, {5, 7}, {6, 7}};  // 所有能形成活三的格子
+    EXPECT_EQ(ai.decide(viewOf(spec)), std::nullopt);
+}
+
+TEST(AIDecisionTest, A17_A7_BlocksOpponentOpenThreeFirst) {
+    AIEngine ai = engineVsEmptyOpponent(3);
+    ViewSpec spec{{"", "", "", "...OOO...", "", "", "", "...XX...."}};
+    spec.now = 100;
+    spec.energy = 3;
+    EXPECT_TRUE(placedIn(ai.decide(viewOf(spec)), cells({{2, 3}, {6, 3}})));
+}
+
+TEST(AIDecisionTest, A18_SnipesFourWhenOpponentCannotRespond) {
+    AIEngine ai = engineVsEmptyOpponent();
+    ViewSpec spec = rowSpec("OXXX.....");
+    spec.now = 100;
+    spec.energy = 2;  // A9 會保留（下完剩 1 < R = 2），只有 A18 會下
+    const auto action = ai.decide(viewOf(spec));
+    ASSERT_TRUE(formsPattern(spec, action, Pattern::Four));
+
+    // 下一次能下子的決策就成五（A4）
+    std::string row = "OXXX.....";
+    row[static_cast<std::size_t>(placedAt(action)->x)] = 'X';
+    ViewSpec next = rowSpec(row);
+    next.now = 100 + 2 * kReaction;
+    next.energy = 1;
+    const auto five = ai.decide(viewOf(next));
+    const Board board = boardFromRows(next.rows);
+    ASSERT_TRUE(placedAt(five).has_value());
+    bool completes = false;
+    for (int d = 0; d < AIEngine::kDirectionCount; ++d) {
+        completes = completes || AIEngine::patternAt(board, *placedAt(five), PlayerId::Black, d) == Pattern::Five;
+    }
+    EXPECT_TRUE(completes);
+}
+
+TEST(AIDecisionTest, A18_NotWhenOpponentCanRespond) {
+    AIEngine ai = engine();
+    ViewSpec spec = rowSpec("OXXX.....");
+    spec.energy = 2;
+    EXPECT_EQ(ai.decide(viewOf(spec)), std::nullopt);
+}
+
+TEST(AIDecisionTest, A14_ObservesEvenBeforeReactionTime) {
+    // 對手開局 1 格：100 時能應對。200 時（反應時間未到）看到對手下了一子，之後那一格被摧毀；
+    // 450 決策時，只有在 200 那次也觀察過，才知道對手已經沒有能量
+    AIEngine ai = engineVsEmptyOpponent(2, 1);
+    ViewSpec spec = rowSpec("OXXX.....");
+    spec.now = 100;
+    spec.energy = 1;  // 能下子但沒有能量出手
+    ASSERT_EQ(ai.decide(viewOf(spec)), std::nullopt);
+
+    spec.rows = {"", "", "", "", "", "", "", "OXXX.....", "", "", "", "", "O"};
+    spec.now = 200;
+    EXPECT_EQ(ai.decide(viewOf(spec)), std::nullopt);  // 反應時間未到
+
+    spec.rows = {"", "", "", "", "", "", "", "OXXX.....", "", "", "", "", "#"};
+    spec.now = 450;
+    spec.energy = 2;
+    EXPECT_TRUE(formsPattern(spec, ai.decide(viewOf(spec)), Pattern::Four));  // A18
 }

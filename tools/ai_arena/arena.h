@@ -20,6 +20,7 @@ struct ArenaOptions {
     ArenaSkill skill = ArenaSkill::None;
     ArenaEngine a = ArenaEngine::New;
     ArenaEngine b = ArenaEngine::Baseline;
+    std::optional<int> reserve;  // 指定 new 的保留能量 R（spec A15），沒指定用 AIConfig 預設
 };
 
 // 解析命令列參數（不含程式名稱）；不合法時回傳 nullopt，原因寫進 error

@@ -9,13 +9,21 @@
 
 namespace {
 
+// AIEngine 改收整份 MatchConfig（design §4.8）；其他設定用預設值
+MatchConfig matchOf(const AIConfig& ai, const SkillConfig& skill) {
+    MatchConfig match;
+    match.ai = ai;
+    match.skill = skill;
+    return match;
+}
+
 constexpr double kWeight = 0.8;
 
 AIEngine blackEngine(std::uint32_t seed = 1, PatternScores scores = {}) {
     AIConfig config;
     config.defenseWeight = kWeight;
     config.scores = scores;
-    return AIEngine(PlayerId::Black, config, SkillConfig{}, seed);
+    return AIEngine(PlayerId::Black, matchOf(config, SkillConfig{}), seed);
 }
 
 // 第 7 列放一排棋子（避免碰到邊界），回傳 (x, 7) 的分數

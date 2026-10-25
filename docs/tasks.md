@@ -264,7 +264,7 @@
         - 原本的 AI 測試全部通過
     - 新增 `docs/ai_benchmark.md`，記錄 new 對 baseline 無技能、有技能各一筆（這時兩邊是同一份程式，勝率應接近 50%，順便確認工具沒有偏差）
     - README 加上對戰工具的用法
-- [ ] **T25 能量管理與推算對手能量**　規格：A3、E5、M1a、A6、A9a、A14、A14a、A15–A18、§11
+- [x] **T25 能量管理與推算對手能量**　規格：A3、E5、M1a、A6、A9a、A14、A14a、A15–A18、§11
     - 排在連續衝四之前：實驗顯示雙方 AI 都是一回能就下子，能量是目前最大的瓶頸；連續衝四也要先能「存夠能量再出手」才能發揮
     - `AIEngine` 建構子改收 `MatchConfig`（design §4.8）；呼叫的地方與測試跟著改。`AIConfig` 新增 `reserveEnergy`、`countOpponentDestroy`
     - 新增 `OpponentModel`（`src/core/opponent_model.h`），測試（A14、A14a）：

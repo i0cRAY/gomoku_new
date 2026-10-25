@@ -21,6 +21,9 @@ constexpr int kLineLength = 2 * kReach + 1;
 constexpr int kCenter = kReach;
 constexpr double kScoreEpsilon = 1e-9;  // 比較同分用
 constexpr int kPlaceEnergy = 1;         // spec §5：每子消耗
+constexpr int kFollowUpEnergy = 2;      // spec A16：做活四後還有 1 格能接著成五
+constexpr int kRushEnergy = 3;          // spec A17：活三、活四、成五各 1 格
+constexpr int kSnipeEnergy = 2;         // spec A18：衝四、成五各 1 格
 
 bool contains(const std::vector<Pos>& cells, Pos p) {
     return std::find(cells.begin(), cells.end(), p) != cells.end();
@@ -131,15 +134,20 @@ Pattern twoLevel(Line line) {
 
 }  // namespace
 
-AIEngine::AIEngine(PlayerId self, const AIConfig& ai, const SkillConfig& skill, std::uint32_t seed)
+AIEngine::AIEngine(PlayerId self, const MatchConfig& match, std::uint32_t seed)
     : self(self),
-      reactionTime(ai.reactionTime),
-      defenseWeight(ai.defenseWeight),
+      reactionTime(match.ai.reactionTime),
+      regenInterval(match.regenInterval),
+      placeCooldown(match.placeCooldown),
+      defenseWeight(match.ai.defenseWeight),
       rng(seed),
-      scores(ai.scores),
-      skills(skill),
-      destroyMinGain(ai.destroyMinGain),
-      useSkills(ai.useSkills) {}
+      scores(match.ai.scores),
+      skills(match.skill),
+      destroyMinGain(match.ai.destroyMinGain),
+      useSkills(match.ai.useSkills),
+      reserveEnergy(match.ai.reserveEnergy),
+      countOpponentDestroy(match.ai.countOpponentDestroy),
+      opponentModel(self, match) {}
 
 SkillId AIEngine::chooseSkill() {
     constexpr SkillId kSkills[] = {SkillId::Dominate, SkillId::Destroy};  // A2a；炸彈暫停使用（S1b）
@@ -149,14 +157,16 @@ SkillId AIEngine::chooseSkill() {
 
 void AIEngine::newGame() {
     lastDecision.reset();
+    opponentModel.reset();
 }
 
-// 決策優先順序 A4 → A5 → A8a → A6 → A7 → A8b → A9（含 A9a）；任何下子動作在不能下子時都改為本次不行動。
-// 所有「下在某格」的候選都先排除對手的禁區（A5a）
+// 決策優先順序 A4 → A5 → A8a → A6（含 A16）→ A7 → A17 → A18 → A8b → A9（含 A15）；
+// 任何下子動作在不能下子時都改為本次不行動。所有「下在某格」的候選都先排除對手的禁區（A5a）
 std::optional<Action> AIEngine::decide(const PlayerView& view) {
     if (view.status != GameStatus::Running) {
         return std::nullopt;
     }
+    opponentModel.observe(view);  // A14：每次 tick 都觀察，不受反應時間限制
     if (lastDecision && view.now - *lastDecision < reactionTime) {
         return std::nullopt;  // A2
     }
@@ -180,29 +190,29 @@ std::optional<Action> AIEngine::decide(const PlayerView& view) {
     if (const auto threats = fivePoints(board, opponent(self)); !threats.empty()) {
         return respondToFivePoints(view, threats, zones);
     }
-    std::vector<Pos> openFours;
-    for (int y = 0; y < Board::kSize; ++y) {
-        for (int x = 0; x < Board::kSize; ++x) {
-            for (int d = 0; d < kDirectionCount; ++d) {
-                if (patternAt(board, {x, y}, self, d) == Pattern::OpenFour) {
-                    openFours.push_back({x, y});
-                    break;
-                }
-            }
-        }
-    }
-    const std::vector<Pos> fours = without(openFours, zones);
+    const std::vector<Pos> fours = cellsForming(board, self, Pattern::OpenFour, zones);
     // A8a：自己有活三以上時先開霸道，之後做活四的那一子就會產生禁區（技能不受下子間隔影響，S5）
     if (!fours.empty() && view.self.dominateCharges == 0 && skillReady(view, SkillId::Dominate)) {
         return SkillAction{self, SkillId::Dominate, std::nullopt};
     }
-    // A6：自己能形成活四
-    if (!fours.empty()) {
+    // A6：自己能形成活四，且 A16 能接著成五
+    if (!fours.empty() && canFollowOpenFour(view)) {
         return place(highestScore(board, fours));
     }
     // A7：對手有活三 → 擋（不用炸彈）
     if (const auto block = openThreeBlock(board, zones)) {
         return place(block);
+    }
+    // A17：強攻；A18：搶分衝四（對手 850 ms 內不能應對）
+    if (placeable && view.self.energy >= kRushEnergy && opponentCannotRespond()) {
+        if (const auto cells = cellsForming(board, self, Pattern::OpenThree, zones); !cells.empty()) {
+            return place(highestScoreRandomTie(board, cells));
+        }
+    }
+    if (placeable && view.self.energy >= kSnipeEnergy && opponentCannotRespond()) {
+        if (const auto cells = cellsForming(board, self, Pattern::Four, zones); !cells.empty()) {
+            return place(highestScoreRandomTie(board, cells));
+        }
     }
     // A8b：差值夠大時主動摧毀
     if (skillReadyWithSpare(view, SkillId::Destroy)) {
@@ -210,7 +220,7 @@ std::optional<Action> AIEngine::decide(const PlayerView& view) {
             return SkillAction{self, SkillId::Destroy, area->target};
         }
     }
-    // A9、A9a
+    // A9、A15
     if (!placeable || !keepsReserve(view)) {
         return std::nullopt;
     }
@@ -284,12 +294,46 @@ bool AIEngine::skillReadyWithSpare(const PlayerView& view, SkillId skill) const 
     return skillReady(view, skill) && view.self.energy >= skills.costOf(skill) + kPlaceEnergy;
 }
 
-// A9a：下子後能量仍 ≥ 自己技能的消耗；摧毀已用過或不用技能時沒有技能要存能量
+// A15：下子後能量 ≥ 保留能量 R；技能還能用時 R 至少是技能消耗（摧毀已用過或不用技能時不考慮）
 bool AIEngine::keepsReserve(const PlayerView& view) const {
-    if (!useSkills || (view.self.skill == SkillId::Destroy && view.self.destroyUsed)) {
+    const bool skillUsable = useSkills && !(view.self.skill == SkillId::Destroy && view.self.destroyUsed);
+    const int reserve = skillUsable ? std::max(reserveEnergy, skills.costOf(view.self.skill)) : reserveEnergy;
+    return view.self.energy - kPlaceEnergy >= reserve;
+}
+
+// A16：能量 ≥ 2 時下完活四還能在下子間隔後成五；只有 1 格時，要在自己下一格能量回來、
+// 再加上下子間隔之前，對手最多只能下 1 子（擋不了兩端）
+bool AIEngine::canFollowOpenFour(const PlayerView& view) const {
+    if (view.self.energy >= kFollowUpEnergy) {
         return true;
     }
-    return view.self.energy - kPlaceEnergy >= skills.costOf(view.self.skill);
+    const TimeMs nextEnergy = regenInterval - view.self.regenProgress;
+    return opponentModel.placementsWithin(nextEnergy + placeCooldown) <= 1;
+}
+
+// A17、A18：對手在「下子間隔 + 自己的反應時間」內不能應對（A14a）
+bool AIEngine::opponentCannotRespond() const {
+    return !opponentModel.canRespondWithin(placeCooldown + reactionTime, countOpponentDestroy);
+}
+
+std::vector<Pos> AIEngine::cellsForming(const Board& board, PlayerId player, Pattern pattern,
+                                        const std::vector<Pos>& excluded) {
+    std::vector<Pos> cells;
+    for (int y = 0; y < Board::kSize; ++y) {
+        for (int x = 0; x < Board::kSize; ++x) {
+            const Pos p{x, y};
+            if (!board.isEmpty(p) || contains(excluded, p)) {
+                continue;
+            }
+            for (int d = 0; d < kDirectionCount; ++d) {
+                if (patternAt(board, p, player, d) == pattern) {
+                    cells.push_back(p);
+                    break;
+                }
+            }
+        }
+    }
+    return cells;
 }
 
 std::vector<Pos> AIEngine::opponentZones(const PlayerView& view) const {
@@ -553,6 +597,25 @@ std::optional<Pos> AIEngine::openThreeBlock(const Board& board, const std::vecto
         }
     }
     return highestScore(board, candidates);
+}
+
+std::optional<Pos> AIEngine::highestScoreRandomTie(const Board& board, const std::vector<Pos>& candidates) {
+    std::vector<Pos> best;
+    double bestScore = 0.0;
+    for (Pos p : candidates) {
+        const double s = score(board, p);
+        if (best.empty() || s > bestScore + kScoreEpsilon) {
+            best = {p};
+            bestScore = s;
+        } else if (s > bestScore - kScoreEpsilon) {
+            best.push_back(p);
+        }
+    }
+    if (best.empty()) {
+        return std::nullopt;
+    }
+    std::uniform_int_distribution<std::size_t> pick(0, best.size() - 1);  // A11
+    return best[pick(rng)];
 }
 
 std::optional<Pos> AIEngine::highestScore(const Board& board, const std::vector<Pos>& candidates) const {

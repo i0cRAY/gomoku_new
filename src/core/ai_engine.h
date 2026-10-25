@@ -8,19 +8,21 @@
 #include "core/ai_player.h"
 #include "core/board.h"
 #include "core/config.h"
+#include "core/opponent_model.h"
 #include "core/player_view.h"
 #include "core/types.h"
 
 // 棋型（spec §8.2），由強到弱
 enum class Pattern { Five, OpenFour, Four, OpenThree, Three, OpenTwo, Two, None };
 
-// AI 引擎（spec A1–A12）。亂數使用以 seed 初始化的 std::mt19937（A11）
+// AI 引擎（spec A1–A18）。亂數使用以 seed 初始化的 std::mt19937（A11）
 class AIEngine : public AIPlayer {
 public:
     static constexpr int kDirectionCount = 4;  // 橫、直、右下斜、右上斜
 
-    // 反應時間（A2）、w 與評分表取自 AIConfig；技能耗能與範圍取自 SkillConfig
-    AIEngine(PlayerId self, const AIConfig&, const SkillConfig&, std::uint32_t seed);
+    // 反應時間（A2）、w、評分表、保留能量（A15）取自 MatchConfig::ai；技能耗能與範圍取自 MatchConfig::skill；
+    // 推算對手（A14）用回能間隔、開局能量、能量上限與下子間隔
+    AIEngine(PlayerId self, const MatchConfig&, std::uint32_t seed);
 
     SkillId chooseSkill() override;  // A2a：技能選擇階段隨機選一項
     // A1–A9：反應時間未到，或判斷本次不行動時回傳 nullopt。
@@ -50,7 +52,11 @@ private:
     bool canPlace(const PlayerView&) const;
     bool skillReady(const PlayerView&, SkillId) const;
     bool skillReadyWithSpare(const PlayerView&, SkillId) const;  // 用完還留 1 格可以下子（A8b）
-    bool keepsReserve(const PlayerView&) const;                   // A9a
+    bool keepsReserve(const PlayerView&) const;                   // A15
+    bool canFollowOpenFour(const PlayerView&) const;              // A16
+    bool opponentCannotRespond() const;                           // A17、A18 共用的 A14a 條件
+    // 下在該格後，某個方向剛好形成 pattern 的空格（排除 excluded，A5a）
+    static std::vector<Pos> cellsForming(const Board&, PlayerId, Pattern, const std::vector<Pos>& excluded);
     std::vector<Pos> opponentZones(const PlayerView&) const;  // A5a：當下對自己有效的禁區格
     std::vector<Pos> fivePoints(const Board&, PlayerId) const;
     Threat threatOf(const Board&) const;  // 對手的威脅分（spec A5）：成五點數量，再比全盤最高進攻分
@@ -66,14 +72,20 @@ private:
     std::optional<AreaChoice> bestDestroyArea(const Board&, const std::optional<std::vector<Pos>>& mustCover);
     std::optional<Pos> openThreeBlock(const Board&, const std::vector<Pos>& zones) const;  // A7
     std::optional<Pos> highestScore(const Board&, const std::vector<Pos>& candidates) const;
+    std::optional<Pos> highestScoreRandomTie(const Board&, const std::vector<Pos>& candidates);  // 同分依 A11
 
     PlayerId self;
     TimeMs reactionTime;
+    TimeMs regenInterval;  // spec §4：A16 計算自己下一格能量何時回來
+    TimeMs placeCooldown;  // spec §5
     double defenseWeight;
     std::mt19937 rng;
     PatternScores scores;
     SkillConfig skills;  // spec S2 各技能的消耗、SB3 炸彈範圍、SX2 摧毀範圍
     int destroyMinGain;  // spec A8b
     bool useSkills;      // spec §11 無技能跑分
+    int reserveEnergy;   // spec A15
+    bool countOpponentDestroy;  // spec A14a
+    OpponentModel opponentModel;  // spec A14
     std::optional<TimeMs> lastDecision;
 };

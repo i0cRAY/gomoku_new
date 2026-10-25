@@ -67,14 +67,18 @@ private:
     bool lastDestroyUsed = false;
 };
 
-std::unique_ptr<AIPlayer> makeEngine(ArenaEngine engine, PlayerId player, const MatchConfig& match, bool useSkills,
-                                     std::uint32_t seed) {
+std::unique_ptr<AIPlayer> makeEngine(ArenaEngine engine, PlayerId player, const MatchConfig& match,
+                                     const ArenaOptions& options, std::uint32_t seed) {
+    const bool useSkills = options.skill != ArenaSkill::None;
     if (engine == ArenaEngine::Baseline) {
         return std::make_unique<baseline::BaselineAI>(player, baseline::frozenConfig(useSkills), match.skill, seed);
     }
-    AIConfig config = match.ai;
-    config.useSkills = useSkills;
-    return std::make_unique<AIEngine>(player, config, match.skill, seed);
+    MatchConfig config = match;
+    config.ai.useSkills = useSkills;
+    if (options.reserve) {
+        config.ai.reserveEnergy = *options.reserve;
+    }
+    return std::make_unique<AIEngine>(player, config, seed);
 }
 
 std::optional<SkillId> forcedSkillOf(ArenaSkill skill) {
@@ -170,6 +174,13 @@ std::optional<ArenaOptions> parseArenaArgs(const std::vector<std::string>& args,
                 return std::nullopt;
             }
             options.seed = static_cast<std::uint32_t>(*n);
+        } else if (flag == "--reserve") {
+            const auto n = parsePositive(value);
+            if (!n) {
+                error = "--reserve 必須是非負整數";
+                return std::nullopt;
+            }
+            options.reserve = *n;
         } else if (flag == "--mode") {
             if (value == "time") {
                 options.modes = {MatchMode::TimeLimit};
@@ -209,13 +220,13 @@ std::optional<ArenaOptions> parseArenaArgs(const std::vector<std::string>& args,
 std::string arenaUsage() {
     return "用法：ai_arena [--games N] [--mode time|score|both] [--seed S]\n"
            "               [--skill none|random|dominate|destroy] [--a new|baseline] [--b new|baseline]\n"
+           "               [--reserve R]（new 的保留能量，spec A15）\n"
            "預設：400 場、兩種模式、seed 1、不用技能、A 為 new、B 為 baseline\n";
 }
 
 ArenaResult runArena(const ArenaOptions& options, MatchMode mode) {
     ArenaResult result;
     std::mt19937 seeds(options.seed);  // 第 g 場的 seed 由 --seed 與 g 決定
-    const bool useSkills = options.skill != ArenaSkill::None;
     const std::optional<SkillId> forced = forcedSkillOf(options.skill);
 
     for (int g = 0; g < options.games; ++g) {
@@ -231,8 +242,8 @@ ArenaResult runArena(const ArenaOptions& options, MatchMode mode) {
                          [&](PlayerId player, RejectReason reason, std::optional<Pos>) {
                              ++(player == a ? result.a : result.b).rejections[reason];
                          });
-        auto aiA = std::make_unique<MeasuredAI>(makeEngine(options.a, a, match, useSkills, seedA), forced, result.a);
-        auto aiB = std::make_unique<MeasuredAI>(makeEngine(options.b, b, match, useSkills, seedB), forced, result.b);
+        auto aiA = std::make_unique<MeasuredAI>(makeEngine(options.a, a, match, options, seedA), forced, result.a);
+        auto aiB = std::make_unique<MeasuredAI>(makeEngine(options.b, b, match, options, seedB), forced, result.b);
         MeasuredAI& watchA = *aiA;
         MeasuredAI& watchB = *aiB;
         controller.attachAI(a, std::move(aiA));  // 和人機模式同一條路：A2a 選技能、每次 tick 決策（design §4.8）
@@ -290,8 +301,9 @@ std::string formatResult(const ArenaOptions& options, MatchMode mode, const Aren
     char buffer[512];
     std::string text;
 
-    std::snprintf(buffer, sizeof buffer, "== %s | A=%s 對 B=%s | 技能 %s | %d 場 | seed %u ==\n", modeName(mode),
-                  engineName(options.a), engineName(options.b), skillName(options.skill), r.games, options.seed);
+    std::snprintf(buffer, sizeof buffer, "== %s | A=%s 對 B=%s | 技能 %s | %d 場 | seed %u%s ==\n", modeName(mode),
+                  engineName(options.a), engineName(options.b), skillName(options.skill), r.games, options.seed,
+                  options.reserve ? (" | R " + std::to_string(*options.reserve)).c_str() : "");
     text += buffer;
     std::snprintf(buffer, sizeof buffer, "A 方：勝 %d 負 %d 和 %d  勝率 %s（95%% 信賴區間 %s–%s，和局算半場）\n", r.wins,
                   r.losses, r.draws, percent(total.rate).c_str(), percent(total.low).c_str(),
