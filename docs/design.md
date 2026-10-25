@@ -152,6 +152,9 @@ struct AIConfig {
     bool useSkills = true;               // spec §11：false 只給 ai_arena 的無技能跑分
     int reserveEnergy = 2;               // spec A15：不緊急的棋下完後至少保留的能量
     bool countOpponentDestroy = true;    // spec A14a：對手可能還能用摧毀時視為能應對
+    int vcfMaxDepth = 8;                 // spec §8.7：連續衝四最多幾子
+    int vcfNodeLimit = 1000;             // spec §8.7：每次決策最多檢查幾個盤面
+    int vcfDefenseMargin = 1;            // spec A20：對手推算能量 ≥ L₀ − margin 時才擋
 };
 
 // spec W11：盤面分，只用來決勝 ⚠️待確認
@@ -387,7 +390,7 @@ signals:
 
 測試時不使用 GameClock，直接呼叫 `controller.tick(t)` 和 `submit(a, t)`，自己指定時間。
 
-### 4.8 AIEngine（`src/core/ai_engine.h`）— spec A1–A18
+### 4.8 AIEngine（`src/core/ai_engine.h`）— spec A1–A20
 
 ```cpp
 enum class Pattern { Five, OpenFour, Four, OpenThree, Three, OpenTwo, Two, None };
@@ -434,6 +437,28 @@ public:
 - 「當場連成五被消除」的子：`lastClearedLines` 和上一次觀察到的不同，且屬於對手、含有上一次是空格的格子，就算一次下子；同一批消除只算一次。
 - 純 C++，可以單獨寫單元測試：直接餵一連串手寫的 PlayerView。
 
+#### 連續衝四搜尋（`src/core/threat_search.h`）— spec §8.7、A19、A20
+
+```cpp
+struct VcfLimits {
+    int maxDepth;   // 自己最多幾子
+    int nodeBudget; // 還能檢查幾個盤面；搜尋時遞減，同一次決策的多次搜尋共用
+};
+struct VcfLine {
+    std::vector<Pos> moves;       // 自己的下子（最後一子之後就能成五）
+    std::vector<Pos> fivePoints;  // 每一子之後的成五點（對手被迫擋的位置；最後一項是 ≥ 2 個成五點之一）
+    int length;                   // spec 的 L：自己需要的子數，含最後成五那一子
+};
+// 所有 L 最短的路線的第一子都要能比較，所以回傳 L 最短的全部路線（每個第一子一條）
+std::vector<VcfLine> findVcf(const Board&, PlayerId, const std::vector<Pos>& excluded, VcfLimits&);
+std::vector<Pos> fivePointsOf(const Board&, PlayerId);  // 五格窗口內 4 子 + 1 空格的那一格
+```
+
+- 成五點用「五格窗口」計算：枚舉所有橫、直、兩條斜線的連續五格，裡面剛好 4 顆 player 的子、1 個空格（不含對手子與已摧毀格）時，該空格就是成五點。和 `patternAt` 判斷成五的結果相同，但一個盤面只要幾 µs。
+- 候選下子：能讓自己剛好有 1 個或 ≥ 2 個成五點、或直接成五的空格（同樣用窗口找：窗口內 3 子 + 2 空格時，兩個空格都是候選）。
+- 深度優先搜尋，先找短的路線；`nodeBudget` 用完立刻回傳目前找到的結果。純 C++，用盤面字串直接測試。
+- AIEngine 每次決策建立一個 `VcfLimits{vcfMaxDepth, vcfNodeLimit}`，A19、A19a、A20（含檢查每個候選擋點）共用同一份 budget。
+
 #### AIPlayer 介面與基準 AI（spec §11 的 AI 強化跑分）
 
 GameController 不直接持有 AIEngine，而是持有介面，讓對戰工具可以換成基準 AI：
@@ -459,7 +484,7 @@ std::array<std::unique_ptr<AIPlayer>, 2> ais;
 - `BaselineAI`：T24 開始時把 AIEngine（含 `useSkills`，當時的保留能量規則是已刪除的 A9a）原樣複製一份，放在 `tools/ai_arena/baseline_ai.*`，之後不修改，只有對戰工具會用到。它只依賴 `gomoku_core`，同樣遵守 core 的限制（不用 Qt、不讀系統時間）。
 - `tools/ai_arena`：命令列程式，連結 `gomoku_app`。每場用 GameController 加上 `attachAI` 跑，和人機模式走同一條路（tick 50 ms、兩方輪流先決策）；A 方每場輪流執黑、執白，第 g 場的 seed 由 `--seed` 與 g 決定，同樣的參數一定得到同樣的結果。量測 `decide` 計算時間用 `std::chrono::steady_clock`，只在工具裡使用，不進 core。
 
-AI 決策流程（對應 spec A4–A18，順序 A4 → A5 → A8a → A6（含 A16）→ A7 → A17 → A18 → A8b → A9（含 A15））：
+AI 決策流程（對應 spec A4–A20，順序 A4 → A5 → A8a → A6（含 A16）→ A19 → A20 → A7 → A17 → A18 → A8b → A9（含 A15、A19a））：
 
 ```mermaid
 %%{init: {"flowchart": {"useMaxWidth": true}, "themeVariables": {"fontSize": "12px"}}}%%
@@ -483,7 +508,11 @@ Threat -->|否| Dom{"A8a 選了霸道、次數為 0、<br/>能量 ≥ 1 且自�
 Dom -->|是| UseDom[使用霸道]
 Dom -->|否| Four{"A6 自己能做活四，<br/>且 A16 能接著成五？"}
 Four -->|是| Place
-Four -->|否| Three{"A7 對手<br/>有活三？"}
+Four -->|否| Vcf{"A19 自己有連續衝四<br/>且能量 ≥ L？"}
+Vcf -->|是| Place
+Vcf -->|否| OppVcf{"A20 對手有連續衝四、<br/>推算能量 ≥ L₀ − 1 且擋得住？"}
+OppVcf -->|是| Place
+OppVcf -->|否| Three{"A7 對手<br/>有活三？"}
 Three -->|是| Place
 Three -->|否| Rush{"A17 能量 ≥ 3、對手 850 ms 內<br/>不能應對、能做活三？"}
 Rush -->|是| Place
@@ -491,7 +520,7 @@ Rush -->|否| Snipe{"A18 能量 ≥ 2、對手 850 ms 內<br/>不能應對、能
 Snipe -->|是| Place
 Snipe -->|否| Gain{"A8b 選了摧毀、沒用過、能量 ≥ 2<br/>且最佳差值 ≥ 3？"}
 Gain -->|是| UseDestroy
-Gain -->|否| Reserve{"A15 下子後能量<br/>≥ 保留能量 R？"}
+Gain -->|否| Reserve{"A15 下子後能量 ≥ R，<br/>且沒有 A19a 要存的能量？"}
 Reserve -->|否| End
 Reserve -->|是| Eval["A9 / A10 全盤評分<br/>選最高分"]
 Eval --> Place
