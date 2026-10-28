@@ -46,6 +46,9 @@ struct AIConfig {
     bool useSkills = true;       // false：不用技能，A15 也不考慮技能消耗；只給 ai_arena 的無技能跑分（spec §11）
     int reserveEnergy = 2;       // spec A15：不緊急的棋下完後至少保留的能量 ⚠️待確認
     bool countOpponentDestroy = true;  // spec A14a：對手可能還能用摧毀時視為能應對 ⚠️待確認
+    int vcfMaxDepth = 8;         // spec §8.7：連續衝四最多幾子 ⚠️待確認
+    int vcfNodeLimit = 1000;     // spec §8.7：每次決策最多檢查幾個盤面 ⚠️待確認
+    int vcfDefenseMargin = 1;    // spec A20：對手推算能量 ≥ L₀ − margin 時才擋 ⚠️待確認
     PatternScores scores;
 };
 

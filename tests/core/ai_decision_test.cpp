@@ -10,6 +10,7 @@
 #include "core/ai_engine.h"
 #include "core/config.h"
 #include "core/player_view.h"
+#include "core/threat_search.h"
 
 namespace {
 
@@ -1032,4 +1033,150 @@ TEST(AIDecisionTest, A14_ObservesEvenBeforeReactionTime) {
     spec.now = 450;
     spec.energy = 2;
     EXPECT_TRUE(formsPattern(spec, ai.decide(viewOf(spec)), Pattern::Four));  // A18
+}
+
+// ---- A19、A19a、A20：連續衝四（spec §8.7） ----
+
+namespace {
+
+// 黑方：(4,7) 橫向衝四（對手擋 (5,7)）同時直向成活三，接著 (4,6) 或 (4,10) 做活四。L = 3
+ViewSpec ownFourThree() {
+    return ViewSpec{{"", "", "", "", "", "", "", "OXXX.....", "....X", "....X"}};
+}
+
+// 同樣的形狀換成白方（對手），L₀ = 3
+ViewSpec opponentFourThree() {
+    return ViewSpec{{"", "", "", "", "", "", "", "XOOO.....", "....O", "....O"}};
+}
+
+bool opponentHasVcf(const ViewSpec& spec, const std::optional<Action>& action) {
+    Board board = boardFromRows(spec.rows);
+    if (const auto pos = placedAt(action)) {
+        board.set(*pos, Cell::Black);
+    }
+    VcfLimits limits{8, 100000};
+    return !findVcf(board, PlayerId::White, {}, limits).empty();
+}
+
+}  // namespace
+
+TEST(AIDecisionTest, A19_PlaysFirstMoveWithEnoughEnergy) {
+    AIEngine ai = engine();
+    ViewSpec spec = ownFourThree();
+    spec.energy = 3;
+    EXPECT_TRUE(placedIn(ai.decide(viewOf(spec)), cells({{4, 7}})));
+}
+
+TEST(AIDecisionTest, A19_ContinuesAfterOpponentBlocks) {
+    AIEngine ai = engine();
+    ViewSpec spec{{"", "", "", "", "", "", "", "OXXXXO...", "....X", "....X"}};  // 對手擋了 (5,7)
+    spec.energy = 2;
+    EXPECT_TRUE(placedIn(ai.decide(viewOf(spec)), cells({{4, 6}, {4, 10}})));
+}
+
+TEST(AIDecisionTest, A19a_ChargesWhenEnergyBelowLength) {
+    AIEngine ai = engineWithReserve(0);  // R = 0：沒有 A19a 的話 A9 會下
+    ViewSpec spec = ownFourThree();
+    spec.energy = 2;
+    EXPECT_EQ(ai.decide(viewOf(spec)), std::nullopt);
+}
+
+TEST(AIDecisionTest, A19a_UrgentMovesStillPlayed) {
+    AIEngine ai = engineWithReserve(0);
+    ViewSpec spec = ownFourThree();
+    spec.rows[2] = "......OOO..";  // 對手有活三（A7）
+    spec.energy = 2;
+    EXPECT_TRUE(placedIn(ai.decide(viewOf(spec)), cells({{5, 2}, {9, 2}})));
+}
+
+TEST(AIDecisionTest, A20_BlocksOpponentVcf) {
+    AIEngine ai = engine();  // 對局時間 30000：對手推算是滿格
+    ViewSpec spec = opponentFourThree();
+    const auto action = ai.decide(viewOf(spec));
+    ASSERT_TRUE(placedAt(action).has_value());
+    EXPECT_FALSE(opponentHasVcf(spec, action));
+}
+
+TEST(AIDecisionTest, A20_IgnoredWhenOpponentLacksEnergy) {
+    AIEngine ai = engineVsEmptyOpponent();  // 對手 0 格 < L₀ − 1 = 2
+    ViewSpec spec = opponentFourThree();
+    spec.now = 100;
+    spec.energy = 2;  // A9 會保留（R = 2），只有 A20 會下
+    EXPECT_EQ(ai.decide(viewOf(spec)), std::nullopt);
+}
+
+TEST(AIDecisionTest, A20_MarginComesFromConfig) {
+    MatchConfig match;
+    match.startEnergy = 0;
+    match.ai.vcfDefenseMargin = 10;  // 一律擋
+    AIEngine ai(PlayerId::Black, match, 1);
+    ViewSpec spec = opponentFourThree();
+    spec.now = 100;
+    spec.energy = 2;
+    const auto action = ai.decide(viewOf(spec));
+    ASSERT_TRUE(placedAt(action).has_value());
+    EXPECT_FALSE(opponentHasVcf(spec, action));
+}
+
+TEST(AIDecisionTest, A20_FallsThroughWhenOneStoneCannotBlockAll) {
+    // 對手的活三本身就是 L₀ = 2 的連續衝四，另外還有四三：一子擋不完，A20 不成立，改由 A7 擋活三
+    AIEngine ai = engine();
+    ViewSpec spec = opponentFourThree();
+    spec.rows[2] = "......OOO..";
+    EXPECT_TRUE(placedIn(ai.decide(viewOf(spec)), cells({{5, 2}, {9, 2}})));
+}
+
+TEST(AIDecisionTest, A20_A7_OpenThreeStillBlockedWhenA20Skipped) {
+    AIEngine ai = engineVsEmptyOpponent();  // 對手 0 格 < L₀ − 1 = 1，A20 不擋
+    ViewSpec spec = rowSpec("...OOO...");
+    spec.now = 100;
+    spec.energy = 1;
+    EXPECT_TRUE(placedIn(ai.decide(viewOf(spec)), cells({{2, 7}, {6, 7}})));
+}
+
+TEST(AIDecisionTest, A19_ComesBeforeA20) {
+    AIEngine ai = engine();
+    // 白方在上方（第 2–4 列）也有一樣的形狀
+    ViewSpec spec{{"", "", "XOOO.....", "....O", "....O", "", "", "OXXX.....", "....X", "....X"}};
+    spec.energy = 3;
+    EXPECT_TRUE(placedIn(ai.decide(viewOf(spec)), cells({{4, 7}})));
+}
+
+TEST(AIDecisionTest, A6_ComesBeforeA19) {
+    AIEngine ai = engine();
+    ViewSpec spec = ownFourThree();
+    spec.rows[2] = "...XXX...";  // 另外可以直接做活四
+    spec.energy = 3;
+    EXPECT_TRUE(placedIn(ai.decide(viewOf(spec)), cells({{2, 2}, {6, 2}})));
+}
+
+TEST(AIDecisionTest, A19_PicksShortestLine) {
+    AIEngine ai = engine();
+    ViewSpec spec = ownFourThree();  // 左邊：L = 3
+    // 右邊：(10,12) 同時做出橫向與直向的衝四（另一端都被擋住），L = 2
+    spec.rows[8] = "....X.....O";
+    spec.rows[9] = "....X.....X";
+    spec.rows.push_back("..........X");
+    spec.rows.push_back("..........X");
+    spec.rows.push_back("...........XXXO");
+    spec.energy = 3;
+    EXPECT_TRUE(placedIn(ai.decide(viewOf(spec)), cells({{10, 12}})));
+}
+
+TEST(AIDecisionTest, A20_ComesBeforeA7) {
+    // 對手的活三 (3,7)–(5,7)：擋 (2,7) 時對手 (6,7) 衝四兼直向活三，還有連續衝四；只有 (6,7) 擋得住。
+    // 黑方在 (2,7) 周圍有子，只看 A7 時 (2,7) 分數較高
+    const ViewSpec spec{{"", "", "", "", "", "", ".X", "...OOO...", "..XX..O", "..X...O"}};
+
+    MatchConfig withoutA20;
+    withoutA20.ai.vcfDefenseMargin = -100;  // 對手能量永遠不夠，A20 不成立
+    AIEngine a7Only(PlayerId::Black, withoutA20, 1);
+    EXPECT_TRUE(placedIn(a7Only.decide(viewOf(spec)), cells({{2, 7}})));
+
+    for (std::uint32_t seed = 1; seed <= 5; ++seed) {
+        AIEngine ai = engine(seed);
+        const auto action = ai.decide(viewOf(spec));
+        EXPECT_TRUE(placedIn(action, cells({{6, 7}}))) << seed;
+        EXPECT_FALSE(opponentHasVcf(spec, action)) << seed;
+    }
 }

@@ -147,6 +147,9 @@ AIEngine::AIEngine(PlayerId self, const MatchConfig& match, std::uint32_t seed)
       useSkills(match.ai.useSkills),
       reserveEnergy(match.ai.reserveEnergy),
       countOpponentDestroy(match.ai.countOpponentDestroy),
+      vcfMaxDepth(match.ai.vcfMaxDepth),
+      vcfNodeLimit(match.ai.vcfNodeLimit),
+      vcfDefenseMargin(match.ai.vcfDefenseMargin),
       opponentModel(self, match) {}
 
 SkillId AIEngine::chooseSkill() {
@@ -160,7 +163,7 @@ void AIEngine::newGame() {
     opponentModel.reset();
 }
 
-// 決策優先順序 A4 → A5 → A8a → A6（含 A16）→ A7 → A17 → A18 → A8b → A9（含 A15）；
+// 決策優先順序 A4 → A5 → A8a → A6（含 A16）→ A19 → A20 → A7 → A17 → A18 → A8b → A9（含 A15、A19a）；
 // 任何下子動作在不能下子時都改為本次不行動。所有「下在某格」的候選都先排除對手的禁區（A5a）
 std::optional<Action> AIEngine::decide(const PlayerView& view) {
     if (view.status != GameStatus::Running) {
@@ -199,6 +202,27 @@ std::optional<Action> AIEngine::decide(const PlayerView& view) {
     if (!fours.empty() && canFollowOpenFour(view)) {
         return place(highestScore(board, fours));
     }
+    // A19：自己的連續衝四，能量夠就下第一子；不夠時 A19a 把能量存到 L
+    VcfLimits vcfLimits{vcfMaxDepth, vcfNodeLimit};  // 這次決策的所有搜尋共用（spec §8.7）
+    bool chargeForVcf = false;
+    if (const auto own = findVcf(board, self, zones, vcfLimits); !own.empty()) {
+        if (view.self.energy >= own.front().length) {
+            std::vector<Pos> firstMoves;
+            for (const VcfLine& line : own) {
+                firstMoves.push_back(line.moves.front());
+            }
+            return place(highestScoreRandomTie(board, firstMoves));
+        }
+        chargeForVcf = true;
+    }
+    // A20：對手的連續衝四，對手推算能量夠時才擋
+    const std::vector<Pos> ownZoneCells = ownZones(view);
+    if (const auto theirs = findVcf(board, opponent(self), ownZoneCells, vcfLimits);
+        !theirs.empty() && opponentModel.energy() >= theirs.front().length - vcfDefenseMargin) {
+        if (const auto blocks = vcfBlocks(board, theirs, zones, ownZoneCells, vcfLimits); !blocks.empty()) {
+            return place(highestScoreRandomTie(board, blocks));
+        }
+    }
     // A7：對手有活三 → 擋（不用炸彈）
     if (const auto block = openThreeBlock(board, zones)) {
         return place(block);
@@ -220,8 +244,8 @@ std::optional<Action> AIEngine::decide(const PlayerView& view) {
             return SkillAction{self, SkillId::Destroy, area->target};
         }
     }
-    // A9、A15
-    if (!placeable || !keepsReserve(view)) {
+    // A9、A15、A19a
+    if (!placeable || !keepsReserve(view) || chargeForVcf) {
         return std::nullopt;
     }
     return place(bestPlacement(board, zones));
@@ -334,6 +358,47 @@ std::vector<Pos> AIEngine::cellsForming(const Board& board, PlayerId player, Pat
         }
     }
     return cells;
+}
+
+std::vector<Pos> AIEngine::ownZones(const PlayerView& view) const {
+    std::vector<Pos> cells;
+    for (const ZoneCell& zone : view.zones) {
+        if (zone.owner == self && view.now < zone.expiresAt) {
+            cells.push_back(zone.pos);
+        }
+    }
+    return cells;
+}
+
+// A20：逐一假設自己下在候選格，留下下完後對手不再有連續衝四的格子。
+// 搜尋上限用完時無法確認，該格不算（寧可不擋，也不要以為擋住了）
+std::vector<Pos> AIEngine::vcfBlocks(const Board& board, const std::vector<VcfLine>& lines,
+                                     const std::vector<Pos>& zones, const std::vector<Pos>& ownZoneCells,
+                                     VcfLimits& limits) const {
+    std::vector<Pos> candidates;
+    for (const VcfLine& line : lines) {
+        for (const auto* cells : {&line.moves, &line.fivePoints}) {
+            for (Pos p : *cells) {
+                if (board.isEmpty(p) && !contains(zones, p) && !contains(candidates, p)) {
+                    candidates.push_back(p);
+                }
+            }
+        }
+    }
+    std::vector<Pos> blocks;
+    Board after = board;
+    for (Pos p : candidates) {
+        after.set(p, stoneOf(self));
+        const bool stillThreat = !findVcf(after, opponent(self), ownZoneCells, limits).empty();
+        after.set(p, Cell::Empty);
+        if (limits.nodeBudget < 0) {
+            break;
+        }
+        if (!stillThreat) {
+            blocks.push_back(p);
+        }
+    }
+    return blocks;
 }
 
 std::vector<Pos> AIEngine::opponentZones(const PlayerView& view) const {

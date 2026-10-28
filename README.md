@@ -105,6 +105,7 @@ cmake --build build-release -j --target ai_arena
 |`--skill`|`none`（雙方都不用技能、不保留能量）、`random`、`dominate`、`destroy`|`none`|
 |`--a`、`--b`|`new` 或 `baseline`|A 為 `new`、B 為 `baseline`|
 |`--reserve R`|`new` 的保留能量（spec A15），用來比較不同的 R|`AIConfig` 的預設值|
+|`--vcf-margin M`|`new` 擋對手連續衝四的門檻（spec A20：對手推算能量 ≥ L₀ − M 才擋；很大的值等於一律擋）|`AIConfig` 的預設值|
 
 輸出 A 方的勝率（和局算半場）與 95% 信賴區間、執黑與執白各自的勝率、平均分數與技能次數、被拒絕的請求、沒有結束的場數，以及 `decide` 的計算時間。每次的結果記在 [`docs/ai_benchmark.md`](docs/ai_benchmark.md)。
 

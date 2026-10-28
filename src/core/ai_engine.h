@@ -9,13 +9,14 @@
 #include "core/board.h"
 #include "core/config.h"
 #include "core/opponent_model.h"
+#include "core/threat_search.h"
 #include "core/player_view.h"
 #include "core/types.h"
 
 // 棋型（spec §8.2），由強到弱
 enum class Pattern { Five, OpenFour, Four, OpenThree, Three, OpenTwo, Two, None };
 
-// AI 引擎（spec A1–A18）。亂數使用以 seed 初始化的 std::mt19937（A11）
+// AI 引擎（spec A1–A20）。亂數使用以 seed 初始化的 std::mt19937（A11）
 class AIEngine : public AIPlayer {
 public:
     static constexpr int kDirectionCount = 4;  // 橫、直、右下斜、右上斜
@@ -58,6 +59,10 @@ private:
     // 下在該格後，某個方向剛好形成 pattern 的空格（排除 excluded，A5a）
     static std::vector<Pos> cellsForming(const Board&, PlayerId, Pattern, const std::vector<Pos>& excluded);
     std::vector<Pos> opponentZones(const PlayerView&) const;  // A5a：當下對自己有效的禁區格
+    std::vector<Pos> ownZones(const PlayerView&) const;       // A20：當下限制對手的禁區格
+    // A20：能擋掉對手所有連續衝四的格子（候選取自 lines 上對手的下子格與成五點）
+    std::vector<Pos> vcfBlocks(const Board&, const std::vector<VcfLine>& lines, const std::vector<Pos>& zones,
+                               const std::vector<Pos>& ownZoneCells, VcfLimits&) const;
     std::vector<Pos> fivePoints(const Board&, PlayerId) const;
     Threat threatOf(const Board&) const;  // 對手的威脅分（spec A5）：成五點數量，再比全盤最高進攻分
     std::optional<Action> respondToFivePoints(const PlayerView&, const std::vector<Pos>& points,
@@ -86,6 +91,9 @@ private:
     bool useSkills;      // spec §11 無技能跑分
     int reserveEnergy;   // spec A15
     bool countOpponentDestroy;  // spec A14a
+    int vcfMaxDepth;            // spec §8.7
+    int vcfNodeLimit;
+    int vcfDefenseMargin;       // spec A20
     OpponentModel opponentModel;  // spec A14
     std::optional<TimeMs> lastDecision;
 };

@@ -78,6 +78,9 @@ std::unique_ptr<AIPlayer> makeEngine(ArenaEngine engine, PlayerId player, const 
     if (options.reserve) {
         config.ai.reserveEnergy = *options.reserve;
     }
+    if (options.vcfMargin) {
+        config.ai.vcfDefenseMargin = *options.vcfMargin;
+    }
     return std::make_unique<AIEngine>(player, config, seed);
 }
 
@@ -181,6 +184,13 @@ std::optional<ArenaOptions> parseArenaArgs(const std::vector<std::string>& args,
                 return std::nullopt;
             }
             options.reserve = *n;
+        } else if (flag == "--vcf-margin") {
+            const auto n = parsePositive(value);
+            if (!n) {
+                error = "--vcf-margin 必須是非負整數";
+                return std::nullopt;
+            }
+            options.vcfMargin = *n;
         } else if (flag == "--mode") {
             if (value == "time") {
                 options.modes = {MatchMode::TimeLimit};
@@ -220,7 +230,7 @@ std::optional<ArenaOptions> parseArenaArgs(const std::vector<std::string>& args,
 std::string arenaUsage() {
     return "用法：ai_arena [--games N] [--mode time|score|both] [--seed S]\n"
            "               [--skill none|random|dominate|destroy] [--a new|baseline] [--b new|baseline]\n"
-           "               [--reserve R]（new 的保留能量，spec A15）\n"
+           "               [--reserve R]（new 的保留能量，spec A15）[--vcf-margin M]（new 的 A20 門檻）\n"
            "預設：400 場、兩種模式、seed 1、不用技能、A 為 new、B 為 baseline\n";
 }
 
@@ -303,7 +313,9 @@ std::string formatResult(const ArenaOptions& options, MatchMode mode, const Aren
 
     std::snprintf(buffer, sizeof buffer, "== %s | A=%s 對 B=%s | 技能 %s | %d 場 | seed %u%s ==\n", modeName(mode),
                   engineName(options.a), engineName(options.b), skillName(options.skill), r.games, options.seed,
-                  options.reserve ? (" | R " + std::to_string(*options.reserve)).c_str() : "");
+                  ((options.reserve ? " | R " + std::to_string(*options.reserve) : std::string()) +
+                   (options.vcfMargin ? " | vcf-margin " + std::to_string(*options.vcfMargin) : std::string()))
+                      .c_str());
     text += buffer;
     std::snprintf(buffer, sizeof buffer, "A 方：勝 %d 負 %d 和 %d  勝率 %s（95%% 信賴區間 %s–%s，和局算半場）\n", r.wins,
                   r.losses, r.draws, percent(total.rate).c_str(), percent(total.low).c_str(),
