@@ -482,6 +482,7 @@ std::array<std::unique_ptr<AIPlayer>, 2> ais;
 
 - `AIConfig::useSkills`（預設 `true`）：`false` 時 AI 不使用技能，`A15` 的保留能量也不考慮技能消耗，只給對戰工具的「無技能」跑分使用，遊戲本體一律是 `true`。
 - `BaselineAI`：T24 開始時把 AIEngine（含 `useSkills`，當時的保留能量規則是已刪除的 A9a）原樣複製一份，放在 `tools/ai_arena/baseline_ai.*`，之後不修改，只有對戰工具會用到。它只依賴 `gomoku_core`，同樣遵守 core 的限制（不用 Qt、不讀系統時間）。
+- `T25AI`：T25 完成時（commit `0b18323`）的 AIEngine 與 OpponentModel 原樣複製到 `tools/ai_arena/t25/`，放在 `namespace t25`，之後不修改，只有對戰工具會用到。AI 設定用 `t25::frozenConfig(useSkills)` 固定為 T25 當時的預設值（反應時間、`w`、棋型分數、`reserveEnergy = 2`、`countOpponentDestroy = true`），比賽規則（回能間隔、技能耗能等）仍取自 MatchConfig。`--reserve`、`--vcf-margin` 只影響 `new`。依賴與限制同 `BaselineAI`。
 - `tools/ai_arena`：命令列程式，連結 `gomoku_app`。每場用 GameController 加上 `attachAI` 跑，和人機模式走同一條路（tick 50 ms、兩方輪流先決策）；A 方每場輪流執黑、執白，第 g 場的 seed 由 `--seed` 與 g 決定，同樣的參數一定得到同樣的結果。量測 `decide` 計算時間用 `std::chrono::steady_clock`，只在工具裡使用，不進 core。
 
 AI 決策流程（對應 spec A4–A20，順序 A4 → A5 → A8a → A6（含 A16）→ A19 → A20 → A7 → A17 → A18 → A8b → A9（含 A15、A19a））：

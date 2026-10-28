@@ -12,6 +12,7 @@
 #include "baseline_ai.h"
 #include "core/ai_engine.h"
 #include "core/config.h"
+#include "t25/t25_ai.h"
 
 namespace {
 
@@ -73,6 +74,11 @@ std::unique_ptr<AIPlayer> makeEngine(ArenaEngine engine, PlayerId player, const 
     if (engine == ArenaEngine::Baseline) {
         return std::make_unique<baseline::BaselineAI>(player, baseline::frozenConfig(useSkills), match.skill, seed);
     }
+    if (engine == ArenaEngine::T25) {
+        MatchConfig config = match;
+        config.ai = t25::frozenConfig(useSkills);
+        return std::make_unique<t25::T25AI>(player, config, seed);
+    }
     MatchConfig config = match;
     config.ai.useSkills = useSkills;
     if (options.reserve) {
@@ -100,7 +106,17 @@ bool finished(GameStatus s) {
 }
 
 const char* modeName(MatchMode mode) { return mode == MatchMode::TimeLimit ? "限時" : "達分"; }
-const char* engineName(ArenaEngine engine) { return engine == ArenaEngine::New ? "new" : "baseline"; }
+constexpr std::pair<const char*, ArenaEngine> kEngineNames[] = {
+    {"new", ArenaEngine::New}, {"baseline", ArenaEngine::Baseline}, {"t25", ArenaEngine::T25}};
+
+const char* engineName(ArenaEngine engine) {
+    for (const auto& [name, e] : kEngineNames) {
+        if (e == engine) {
+            return name;
+        }
+    }
+    return "?";
+}
 
 const char* skillName(ArenaSkill skill) {
     switch (skill) {
@@ -214,11 +230,13 @@ std::optional<ArenaOptions> parseArenaArgs(const std::vector<std::string>& args,
             }
             options.skill = found->second;
         } else if (flag == "--a" || flag == "--b") {
-            if (value != "new" && value != "baseline") {
-                error = flag + " 只能是 new 或 baseline";
+            const auto found = std::find_if(std::begin(kEngineNames), std::end(kEngineNames),
+                                            [&](auto& e) { return value == e.first; });
+            if (found == std::end(kEngineNames)) {
+                error = flag + " 只能是 new、baseline 或 t25";
                 return std::nullopt;
             }
-            (flag == "--a" ? options.a : options.b) = value == "new" ? ArenaEngine::New : ArenaEngine::Baseline;
+            (flag == "--a" ? options.a : options.b) = found->second;
         } else {
             error = "不認得的參數：" + flag;
             return std::nullopt;
@@ -229,7 +247,7 @@ std::optional<ArenaOptions> parseArenaArgs(const std::vector<std::string>& args,
 
 std::string arenaUsage() {
     return "用法：ai_arena [--games N] [--mode time|score|both] [--seed S]\n"
-           "               [--skill none|random|dominate|destroy] [--a new|baseline] [--b new|baseline]\n"
+           "               [--skill none|random|dominate|destroy] [--a new|baseline|t25] [--b new|baseline|t25]\n"
            "               [--reserve R]（new 的保留能量，spec A15）[--vcf-margin M]（new 的 A20 門檻）\n"
            "預設：400 場、兩種模式、seed 1、不用技能、A 為 new、B 為 baseline\n";
 }

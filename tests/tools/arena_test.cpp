@@ -67,10 +67,18 @@ TEST(ArenaArgsTest, Spec11_ParsesAllOptions) {
     EXPECT_EQ(options->vcfMargin, std::optional<int>(10));
 }
 
+TEST(ArenaArgsTest, Spec11_ParsesFrozenT25) {
+    std::string error;
+    const auto options = parseArenaArgs({"--a", "t25", "--b", "t25"}, error);
+    ASSERT_TRUE(options.has_value()) << error;
+    EXPECT_EQ(options->a, ArenaEngine::T25);
+    EXPECT_EQ(options->b, ArenaEngine::T25);
+}
+
 TEST(ArenaArgsTest, Spec11_RejectsInvalidArguments) {
     for (const std::vector<std::string>& args : std::vector<std::vector<std::string>>{
              {"--games", "0"}, {"--games", "abc"}, {"--games"}, {"--mode", "fast"}, {"--skill", "bomb"},
-             {"--a", "old"}, {"--seed", "-1"}, {"--reserve", "x"}, {"--vcf-margin", "-2"}, {"--unknown"}}) {
+             {"--a", "old"}, {"--b", "t26"}, {"--seed", "-1"}, {"--reserve", "x"}, {"--vcf-margin", "-2"}, {"--unknown"}}) {
         std::string error;
         EXPECT_FALSE(parseArenaArgs(args, error).has_value()) << args[0];
         EXPECT_FALSE(error.empty());
@@ -173,4 +181,43 @@ TEST(ArenaRunTest, A15_ReserveOptionChangesNewEngineOnly) {
     const ArenaResult held = runArena(keep, MatchMode::ScoreTarget);
     const ArenaResult normal = runArena(twoGames(ArenaSkill::None), MatchMode::ScoreTarget);
     EXPECT_NE(held.a.score * 1000 + held.b.score, normal.a.score * 1000 + normal.b.score);
+}
+
+// ---- 凍結的 T25（T26a） ----
+
+TEST(ArenaRunTest, Spec11_FrozenT25OnBothSides) {
+    ArenaOptions options = twoGames(ArenaSkill::None);
+    options.a = ArenaEngine::T25;
+    options.b = ArenaEngine::T25;
+    const ArenaResult result = runArena(options, MatchMode::TimeLimit);
+    EXPECT_EQ(result.games, 2);
+    EXPECT_EQ(result.unfinished, 0);
+    EXPECT_GT(result.a.decisions, 0);
+    EXPECT_GT(result.b.decisions, 0);
+    EXPECT_EQ(result.a.skillUses, 0);  // 無技能
+    EXPECT_EQ(result.b.skillUses, 0);
+    EXPECT_TRUE(result.a.rejections.empty());
+    EXPECT_TRUE(result.b.rejections.empty());
+}
+
+TEST(ArenaRunTest, Spec11_FrozenT25UsesForcedSkill) {
+    ArenaOptions options = twoGames(ArenaSkill::Destroy);
+    options.a = ArenaEngine::T25;
+    const ArenaResult result = runArena(options, MatchMode::TimeLimit);
+    EXPECT_GT(result.a.skillUses, 0);
+    EXPECT_LE(result.a.skillUses, 2);  // SX3：每局最多一次
+}
+
+TEST(ArenaRunTest, Spec11_NewEngineOptionsDoNotAffectFrozenT25) {
+    ArenaOptions plain = twoGames(ArenaSkill::None);
+    plain.a = ArenaEngine::T25;
+    ArenaOptions tuned = plain;
+    tuned.reserve = 9;
+    tuned.vcfMargin = 10;
+    const ArenaResult x = runArena(plain, MatchMode::ScoreTarget);
+    const ArenaResult y = runArena(tuned, MatchMode::ScoreTarget);
+    EXPECT_EQ(x.a.score, y.a.score);
+    EXPECT_EQ(x.b.score, y.b.score);
+    EXPECT_EQ(x.a.decisions, y.a.decisions);
+    EXPECT_EQ(x.wins, y.wins);
 }

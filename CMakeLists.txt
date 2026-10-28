@@ -85,6 +85,8 @@ target_link_libraries(gomoku PRIVATE gomoku_ui)
 # AI 對戰跑分工具與凍結的基準 AI（spec §11、design §4.8），不屬於遊戲本體
 add_library(ai_arena_lib STATIC
     tools/ai_arena/baseline_ai.cpp
+    tools/ai_arena/t25/t25_ai.cpp
+    tools/ai_arena/t25/opponent_model.cpp
     tools/ai_arena/arena.cpp
 )
 target_include_directories(ai_arena_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/tools/ai_arena)

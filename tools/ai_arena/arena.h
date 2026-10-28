@@ -10,7 +10,8 @@
 
 // AI 對戰跑分（spec §11、design §4.8）：A、B 兩個 AI 用 GameController 對戰，統計 A 方的勝率
 
-enum class ArenaEngine { New, Baseline };                  // new：目前的 AIEngine；baseline：凍結的 BaselineAI
+// new：目前的 AIEngine；baseline：凍結的 BaselineAI（T24）；t25：凍結的 T25AI（T26a）
+enum class ArenaEngine { New, Baseline, T25 };
 enum class ArenaSkill { None, Random, Dominate, Destroy };  // none：雙方都不用技能（AIConfig::useSkills = false）
 
 struct ArenaOptions {

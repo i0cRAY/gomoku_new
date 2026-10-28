@@ -88,13 +88,14 @@ ctest --test-dir build --output-on-failure   # 測試（沒有螢幕的環境請
 
 ## AI 對戰跑分
 
-`ai_arena` 讓目前的 AI（`new`）和凍結的基準 AI（`baseline`，T24 時的版本）大量對戰，用來判斷 AI 有沒有變強（spec §11）。規則和人機模式完全相同，只是時間用模擬的，所以一場只要零點幾秒。請用 Release 建置：
+`ai_arena` 讓目前的 AI（`new`）和凍結的基準 AI（`baseline`，T24 時的版本）大量對戰，用來判斷 AI 有沒有變強（spec §11）；也可以和凍結的前一版（`t25`，T25 時的版本）直接對打。規則和人機模式完全相同，只是時間用模擬的，所以一場只要零點幾秒。請用 Release 建置：
 
 ```bash
 cmake -B build-release -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF
 cmake --build build-release -j --target ai_arena
 ./build-release/ai_arena                  # 無技能，限時、達分各 400 場
 ./build-release/ai_arena --skill random   # 雙方隨機選技能（A2a）
+./build-release/ai_arena --b t25          # 和 T25 的版本直接對打
 ```
 
 |參數|值|預設|
@@ -103,7 +104,7 @@ cmake --build build-release -j --target ai_arena
 |`--mode`|`time`、`score`、`both`|`both`|
 |`--seed S`|亂數種子，同樣的參數一定得到同樣的結果|1|
 |`--skill`|`none`（雙方都不用技能、不保留能量）、`random`、`dominate`、`destroy`|`none`|
-|`--a`、`--b`|`new` 或 `baseline`|A 為 `new`、B 為 `baseline`|
+|`--a`、`--b`|`new`、`baseline` 或 `t25`|A 為 `new`、B 為 `baseline`|
 |`--reserve R`|`new` 的保留能量（spec A15），用來比較不同的 R|`AIConfig` 的預設值|
 |`--vcf-margin M`|`new` 擋對手連續衝四的門檻（spec A20：對手推算能量 ≥ L₀ − M 才擋；很大的值等於一律擋）|`AIConfig` 的預設值|
 
